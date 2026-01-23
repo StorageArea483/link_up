@@ -20,6 +20,10 @@ class ChatService {
     required String text,
   }) async {
     try {
+      // Check if receiver is online to determine initial status
+      final receiverPresence = await getUserPresence(receiverId);
+      final isReceiverOnline = receiverPresence?.data['online'] ?? false;
+
       return await databases.createDocument(
         databaseId: databaseId,
         collectionId: messagesCollectionId,
@@ -29,7 +33,7 @@ class ChatService {
           'senderId': senderId,
           'receiverId': receiverId,
           'text': text,
-          'status': 'sent',
+          'status': isReceiverOnline ? 'delivered' : 'sent',
           'createdAt': DateTime.now().toIso8601String(),
         },
       );
@@ -78,6 +82,62 @@ class ChatService {
           );
     } catch (e) {
       return null;
+    }
+  }
+
+  static subscribeToPresence(
+    String userId,
+    Function(RealtimeMessage) callback,
+  ) {
+    try {
+      return realtime
+          .subscribe([
+            'databases.$databaseId.collections.$presenceCollectionId.documents',
+          ])
+          .stream
+          .listen(
+            (response) {
+              try {
+                if (response.payload['userId'] == userId) {
+                  callback(response);
+                }
+              } catch (e) {}
+            },
+            onError: (error) {},
+            cancelOnError: false,
+          );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static Future<void> markMessagesAsDelivered({
+    required String chatId,
+    required String receiverId,
+  }) async {
+    try {
+      // Get all undelivered messages for this receiver
+      final messages = await databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: messagesCollectionId,
+        queries: [
+          Query.equal('chatId', chatId),
+          Query.equal('receiverId', receiverId),
+          Query.equal('status', 'sent'),
+        ],
+      );
+
+      // Update each message to delivered status
+      for (final message in messages.documents) {
+        await databases.updateDocument(
+          databaseId: databaseId,
+          collectionId: messagesCollectionId,
+          documentId: message.$id,
+          data: {'status': 'delivered'},
+        );
+      }
+    } catch (e) {
+      // Silent failure
     }
   }
 

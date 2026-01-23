@@ -22,6 +22,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   var messageSubscription;
   var typingSubscription;
+  var presenceSubscription;
 
   String? _currentUserId;
   String? _chatId;
@@ -38,6 +39,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _messageController.dispose();
     messageSubscription?.cancel();
     typingSubscription?.cancel();
+    presenceSubscription?.cancel();
 
     if (_currentUserId != null && _chatId != null) {
       ChatService.setTyping(
@@ -45,6 +47,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         userId: _currentUserId!,
         isTyping: false,
       );
+      ChatService.updatePresence(userId: _currentUserId!, online: false);
     }
     super.dispose();
   }
@@ -63,16 +66,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _chatId = chatId;
     ref.read(chatIdProvider.notifier).state = chatId;
 
+    // Set current user as online
+    await ChatService.updatePresence(userId: userId, online: true);
+
     await _loadMessages();
     _subscribeToMessages();
     _subscribeToTyping();
-    _checkUserPresence();
-    _markMessagesAsRead();
+    _subscribeToPresence();
+
+    // Check contact's presence after setting up subscriptions
+    await _checkUserPresence();
+
+    // Mark messages as delivered when user comes online
+    await ChatService.markMessagesAsDelivered(
+      chatId: chatId,
+      receiverId: userId,
+    );
 
     ref.read(isLoadingStateProvider.notifier).state = false;
   }
 
-  // Load existing messages from database
   Future<bool> _loadMessages() async {
     try {
       final chatId = ref.read(chatIdProvider);
@@ -99,30 +112,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       messageSubscription = ChatService.subscribeToMessages(chatId, (response) {
         if (!mounted) return;
         try {
-          final messageData = response.payload;
-          final updatedMessage = Message.fromJson(messageData);
+          final newMessage = Message.fromJson(response.payload);
           final currentMessages = ref.read(messagesProvider);
 
+          // Update existing message if it exists, otherwise add new
           final existingIndex = currentMessages.indexWhere(
-            (msg) => msg.id == updatedMessage.id,
+            (msg) => msg.id == newMessage.id,
           );
-
           if (existingIndex != -1) {
             final updatedMessages = [...currentMessages];
-            updatedMessages[existingIndex] = updatedMessage;
+            updatedMessages[existingIndex] = newMessage;
             ref.read(messagesProvider.notifier).state = updatedMessages;
           } else {
             ref.read(messagesProvider.notifier).state = [
-              updatedMessage,
+              newMessage,
               ...currentMessages,
             ];
-
-            if (updatedMessage.receiverId == _currentUserId &&
-                updatedMessage.status != 'read') {
-              Future.delayed(const Duration(milliseconds: 100), () {
-                ChatService.updateMessageStatus(updatedMessage.id, 'read');
-              });
-            }
           }
         } catch (e) {}
       });
@@ -147,29 +152,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } catch (e) {}
   }
 
-  Future<void> _checkUserPresence() async {
+  void _subscribeToPresence() {
     try {
-      final presence = await ChatService.getUserPresence(widget.contact.uid);
-      if (presence != null && mounted) {
-        ref.read(isOnlineProvider.notifier).state =
-            presence.data['online'] ?? false;
-      }
+      presenceSubscription = ChatService.subscribeToPresence(
+        widget.contact.uid,
+        (response) {
+          if (!mounted) return;
+          try {
+            final isOnline = response.payload['online'] ?? false;
+            ref.read(isOnlineProvider.notifier).state = isOnline;
+
+            // When contact comes online, mark their messages as delivered
+            if (isOnline && _currentUserId != null && _chatId != null) {
+              ChatService.markMessagesAsDelivered(
+                chatId: _chatId!,
+                receiverId: widget.contact.uid,
+              );
+            }
+          } catch (e) {}
+        },
+      );
     } catch (e) {}
   }
 
-  Future<void> _markMessagesAsRead() async {
+  Future<void> _checkUserPresence() async {
     try {
-      final messages = ref.read(messagesProvider);
-      final currentUserId = ref.read(currentUserIdProvider);
-
-      if (currentUserId == null) return;
-
-      for (final message in messages) {
-        if (message.receiverId == currentUserId && message.status != 'read') {
-          await ChatService.updateMessageStatus(message.id, 'read');
-        }
+      final presence = await ChatService.getUserPresence(widget.contact.uid);
+      print(
+        'DEBUG: Contact ${widget.contact.name} presence: ${presence?.data}',
+      );
+      if (mounted) {
+        // If no presence record exists, assume user is offline
+        final isOnline = presence?.data['online'] ?? false;
+        print('DEBUG: Setting contact online status to: $isOnline');
+        ref.read(isOnlineProvider.notifier).state = isOnline;
       }
-    } catch (e) {}
+    } catch (e) {
+      print('DEBUG: Error checking presence: $e');
+      // On error, assume user is offline
+      if (mounted) {
+        ref.read(isOnlineProvider.notifier).state = false;
+      }
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -186,16 +210,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _messageController.clear();
 
     try {
-      final sentMessage = await ChatService.sendMessage(
+      await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
         receiverId: widget.contact.uid,
         text: messageText,
       );
-
-      if (sentMessage != null) {
-        await ChatService.updateMessageStatus(sentMessage.$id, 'delivered');
-      }
 
       await ChatService.setTyping(
         chatId: chatId,
@@ -205,20 +225,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } catch (e) {}
   }
 
-  void _onTypingChanged(String text) async {
+  void _onTypingChanged(String text) {
     final currentUserId = ref.read(currentUserIdProvider);
     final chatId = ref.read(chatIdProvider);
 
     if (currentUserId == null || chatId == null) return;
 
     if (text.isNotEmpty) {
-      await ChatService.setTyping(
+      ChatService.setTyping(
         chatId: chatId,
         userId: currentUserId,
         isTyping: true,
       );
     } else {
-      await ChatService.setTyping(
+      ChatService.setTyping(
         chatId: chatId,
         userId: currentUserId,
         isTyping: false,
@@ -229,12 +249,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     // Listen to connectivity changes and pause/resume subscriptions
-    final isOnlineAsync = ref.watch(networkConnectivityProvider); // true
+    final isOnlineAsync = ref.watch(networkConnectivityProvider);
 
     isOnlineAsync.whenData((isOnline) {
       if (isOnline != _wasOnline) {
-        // false != true
-        _wasOnline = isOnline; // false
+        _wasOnline = isOnline;
         _handleConnectivityChange(isOnline);
       }
     });
@@ -254,12 +273,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _handleConnectivityChange(bool isOnline) {
+    if (_currentUserId == null) return;
+
     if (isOnline) {
       messageSubscription?.resume();
       typingSubscription?.resume();
+      presenceSubscription?.resume();
+
+      // Update presence to online and mark messages as delivered
+      ChatService.updatePresence(userId: _currentUserId!, online: true);
+      if (_chatId != null) {
+        ChatService.markMessagesAsDelivered(
+          chatId: _chatId!,
+          receiverId: _currentUserId!,
+        );
+      }
     } else {
       messageSubscription?.pause();
       typingSubscription?.pause();
+      presenceSubscription?.pause();
+
+      // Update presence to offline
+      ChatService.updatePresence(userId: _currentUserId!, online: false);
     }
   }
 
@@ -553,7 +588,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  // Format timestamp
   String _formatTime(DateTime dateTime) {
-    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays == 0) {
+      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
   }
 }

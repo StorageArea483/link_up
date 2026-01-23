@@ -22,10 +22,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   var messageSubscription;
   var typingSubscription;
-  var presenceSubscription;
 
   String? _currentUserId;
   String? _chatId;
+  bool _wasOnline = true;
 
   @override
   void initState() {
@@ -39,15 +39,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     messageSubscription?.cancel();
     typingSubscription?.cancel();
 
-    if (_currentUserId != null) {
+    if (_currentUserId != null && _chatId != null) {
       ChatService.setTyping(
         chatId: _chatId!,
         userId: _currentUserId!,
         isTyping: false,
       );
-      ChatService.setUserPresence(userId: _currentUserId!, isOnline: false);
     }
-    presenceSubscription?.cancel();
     super.dispose();
   }
 
@@ -68,14 +66,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     await _loadMessages();
     _subscribeToMessages();
     _subscribeToTyping();
-    _subscribeToPresence();
     _checkUserPresence();
-    _setUserPresence(true);
     _markMessagesAsRead();
 
     ref.read(isLoadingStateProvider.notifier).state = false;
   }
 
+  // Load existing messages from database
   Future<bool> _loadMessages() async {
     try {
       final chatId = ref.read(chatIdProvider);
@@ -96,55 +93,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _subscribeToMessages() {
     final chatId = ref.read(chatIdProvider);
-    final currentUserId = ref.read(currentUserIdProvider);
     if (chatId == null) return;
 
     try {
       messageSubscription = ChatService.subscribeToMessages(chatId, (response) {
         if (!mounted) return;
         try {
-          final messageData = Message.fromJson(response.payload);
-          final currentMessages = List<Message>.from(
-            ref.read(messagesProvider),
+          final messageData = response.payload;
+          final updatedMessage = Message.fromJson(messageData);
+          final currentMessages = ref.read(messagesProvider);
+
+          final existingIndex = currentMessages.indexWhere(
+            (msg) => msg.id == updatedMessage.id,
           );
 
-          final index = currentMessages.indexWhere(
-            (m) => m.id == messageData.id,
-          );
-
-          if (index != -1) {
-            // Update existing message (e.g., status change)
-            currentMessages[index] = messageData;
-            ref.read(messagesProvider.notifier).state = currentMessages;
+          if (existingIndex != -1) {
+            final updatedMessages = [...currentMessages];
+            updatedMessages[existingIndex] = updatedMessage;
+            ref.read(messagesProvider.notifier).state = updatedMessages;
           } else {
-            // Add new message
             ref.read(messagesProvider.notifier).state = [
-              messageData,
+              updatedMessage,
               ...currentMessages,
             ];
 
-            // If I am the receiver, mark as read
-            if (messageData.receiverId == currentUserId &&
-                messageData.status != 'read') {
-              ChatService.updateMessageStatus(messageData.id, 'read');
+            if (updatedMessage.receiverId == _currentUserId &&
+                updatedMessage.status != 'read') {
+              Future.delayed(const Duration(milliseconds: 100), () {
+                ChatService.updateMessageStatus(updatedMessage.id, 'read');
+              });
             }
           }
         } catch (e) {}
       });
     } catch (e) {}
-  }
-
-  Future<void> _markMessagesAsRead() async {
-    final currentUserId = ref.read(currentUserIdProvider);
-    final messages = ref.read(messagesProvider);
-
-    if (currentUserId == null) return;
-
-    for (final message in messages) {
-      if (message.receiverId == currentUserId && message.status != 'read') {
-        await ChatService.updateMessageStatus(message.id, 'read');
-      }
-    }
   }
 
   void _subscribeToTyping() {
@@ -165,37 +147,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } catch (e) {}
   }
 
-  void _subscribeToPresence() {
-    try {
-      presenceSubscription = ChatService.subscribeToPresence((response) {
-        if (!mounted) return;
-        try {
-          if (response.payload['userId'] == widget.contact.uid) {
-            ref.read(isOnlineProvider.notifier).state =
-                response.payload['online'] ?? false;
-            final lastSeenStr = response.payload['lastSeen'];
-            if (lastSeenStr != null) {
-              ref.read(lastSeenProvider.notifier).state = DateTime.parse(
-                lastSeenStr,
-              );
-            }
-          }
-        } catch (e) {}
-      });
-    } catch (e) {}
-  }
-
   Future<void> _checkUserPresence() async {
     try {
       final presence = await ChatService.getUserPresence(widget.contact.uid);
       if (presence != null && mounted) {
         ref.read(isOnlineProvider.notifier).state =
             presence.data['online'] ?? false;
-        final lastSeenStr = presence.data['lastSeen'];
-        if (lastSeenStr != null) {
-          ref.read(lastSeenProvider.notifier).state = DateTime.parse(
-            lastSeenStr,
-          );
+      }
+    } catch (e) {}
+  }
+
+  Future<void> _markMessagesAsRead() async {
+    try {
+      final messages = ref.read(messagesProvider);
+      final currentUserId = ref.read(currentUserIdProvider);
+
+      if (currentUserId == null) return;
+
+      for (final message in messages) {
+        if (message.receiverId == currentUserId && message.status != 'read') {
+          await ChatService.updateMessageStatus(message.id, 'read');
         }
       }
     } catch (e) {}
@@ -215,12 +186,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _messageController.clear();
 
     try {
-      await ChatService.sendMessage(
+      final sentMessage = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
         receiverId: widget.contact.uid,
         text: messageText,
       );
+
+      if (sentMessage != null) {
+        await ChatService.updateMessageStatus(sentMessage.$id, 'delivered');
+      }
 
       await ChatService.setTyping(
         chatId: chatId,
@@ -230,54 +205,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } catch (e) {}
   }
 
-  void _onTypingChanged(String text) {
+  void _onTypingChanged(String text) async {
     final currentUserId = ref.read(currentUserIdProvider);
     final chatId = ref.read(chatIdProvider);
 
     if (currentUserId == null || chatId == null) return;
 
     if (text.isNotEmpty) {
-      ChatService.setTyping(
+      await ChatService.setTyping(
         chatId: chatId,
         userId: currentUserId,
         isTyping: true,
       );
-      ref.read(isTypingProvider.notifier).state = true;
     } else {
-      ChatService.setTyping(
+      await ChatService.setTyping(
         chatId: chatId,
         userId: currentUserId,
         isTyping: false,
       );
-      ref.read(isTypingProvider.notifier).state = false;
     }
-  }
-
-  Future<void> _setUserPresence(bool isOnline) async {
-    final currentUserId = ref.read(currentUserIdProvider);
-
-    if (currentUserId == null) {
-      return;
-    }
-
-    try {
-      await ChatService.setUserPresence(
-        userId: currentUserId,
-        isOnline: isOnline,
-      );
-    } catch (e) {}
   }
 
   @override
   Widget build(BuildContext context) {
-    final isOnlineAsync = ref.watch(networkConnectivityProvider);
+    // Listen to connectivity changes and pause/resume subscriptions
+    final isOnlineAsync = ref.watch(networkConnectivityProvider); // true
+
     isOnlineAsync.whenData((isOnline) {
-      if (isOnline != true) {
-        _handleConnectivityChange(false);
-        _setUserPresence(false);
-      } else {
-        _handleConnectivityChange(true);
-        _setUserPresence(true);
+      if (isOnline != _wasOnline) {
+        // false != true
+        _wasOnline = isOnline; // false
+        _handleConnectivityChange(isOnline);
       }
     });
 
@@ -305,6 +263,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  // Build header with contact info
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -353,21 +312,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     );
                     final networkOnline = networkOnlineAsync.value ?? true;
 
-                    final lastSeen = ref.watch(lastSeenProvider);
-
-                    String presenceText = 'Offline';
-                    if (isContactOnline) {
-                      presenceText = 'Online';
-                    } else if (lastSeen != null) {
-                      presenceText = 'Last seen ${_formatLastSeen(lastSeen)}';
-                    }
-
                     return Text(
                       !networkOnline
                           ? 'Waiting for network...'
                           : isTyping
                           ? 'typing...'
-                          : presenceText,
+                          : isContactOnline
+                          ? 'Online'
+                          : 'Offline',
                       style: TextStyle(
                         color: !networkOnline
                             ? Colors.orange
@@ -394,6 +346,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  // Build messages list
   Widget _buildMessagesList() {
     final isLoading = ref.watch(isLoadingStateProvider);
     final currentUserId = ref.watch(currentUserIdProvider);
@@ -601,32 +554,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   String _formatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays == 0) {
-      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    } else if (difference.inDays == 1) {
-      return 'Yesterday';
-    } else {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    }
-  }
-
-  String _formatLastSeen(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'just now';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inDays == 0) {
-      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    } else if (difference.inDays == 1) {
-      return 'yesterday at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    } else {
-      return '${dateTime.day}/${dateTime.month} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    }
+    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }

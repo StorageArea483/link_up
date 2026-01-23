@@ -97,49 +97,10 @@ class ChatService {
     }
   }
 
-  static Future<bool> setUserPresence({
-    required String userId,
-    required bool isOnline,
-  }) async {
-    try {
-      final existingDocs = await databases.listDocuments(
-        databaseId: databaseId,
-        collectionId: presenceCollectionId,
-        queries: [Query.equal('userId', userId)],
-      );
-
-      if (existingDocs.documents.isEmpty) {
-        await databases.createDocument(
-          databaseId: databaseId,
-          collectionId: presenceCollectionId,
-          documentId: ID.unique(),
-          data: {
-            'userId': userId,
-            'online': isOnline,
-            'lastSeen': DateTime.now().toIso8601String(),
-          },
-        );
-      } else {
-        await databases.updateDocument(
-          databaseId: databaseId,
-          collectionId: presenceCollectionId,
-          documentId: existingDocs.documents.first.$id,
-          data: {
-            'online': isOnline,
-            'lastSeen': DateTime.now().toIso8601String(),
-          },
-        );
-      }
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
   static Future<bool> setTyping({
     required String chatId,
     required String userId,
-    required bool isTyping, // null
+    required bool isTyping,
   }) async {
     try {
       final existingDocs = await databases.listDocuments(
@@ -192,22 +153,42 @@ class ChatService {
     }
   }
 
-  static subscribeToPresence(Function(RealtimeMessage) callback) {
+  static Future<bool> updatePresence({
+    required String userId,
+    required bool online,
+  }) async {
     try {
-      return realtime
-          .subscribe([
-            'databases.$databaseId.collections.$presenceCollectionId.documents',
-          ])
-          .stream
-          .listen(
-            (response) {
-              callback(response);
-            },
-            onError: (error) {},
-            cancelOnError: false,
-          );
+      final existingDocs = await databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: presenceCollectionId,
+        queries: [Query.equal('userId', userId)],
+      );
+
+      if (existingDocs.documents.isEmpty) {
+        await databases.createDocument(
+          databaseId: databaseId,
+          collectionId: presenceCollectionId,
+          documentId: ID.unique(),
+          data: {
+            'userId': userId,
+            'online': online,
+            'lastSeen': DateTime.now().toIso8601String(),
+          },
+        );
+      } else {
+        await databases.updateDocument(
+          databaseId: databaseId,
+          collectionId: presenceCollectionId,
+          documentId: existingDocs.documents.first.$id,
+          data: {
+            'online': online,
+            'lastSeen': DateTime.now().toIso8601String(),
+          },
+        );
+      }
+      return true;
     } catch (e) {
-      return null;
+      return false;
     }
   }
 

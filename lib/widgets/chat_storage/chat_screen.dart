@@ -182,22 +182,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _subscribeToPresence() {
     try {
-      presenceSubscription = ChatService.subscribeToPresence(widget.contact.uid, (
-        response,
-      ) {
-        if (!mounted) return;
-        try {
-          final isOnline = response.payload['online'] ?? false;
-          final wasOnline = ref.read(isOnlineProvider);
-          ref.read(isOnlineProvider.notifier).state = isOnline;
+      presenceSubscription = ChatService.subscribeToPresence(
+        widget.contact.uid,
+        (response) {
+          if (!mounted) return;
+          try {
+            final isOnline = response.payload['online'] ?? false;
+            final wasOnline = ref.read(isOnlineProvider);
+            ref.read(isOnlineProvider.notifier).state = isOnline;
 
-          // When contact comes online (transition from offline to online)
-          if (isOnline && !wasOnline && _currentUserId != null && _chatId != null) {
-            // Mark messages as delivered and update UI
-            _markMessagesAsDeliveredAndUpdate(widget.contact.uid);
-          }
-        } catch (e) {}
-      });
+            // When contact comes online (transition from offline to online)
+            if (isOnline &&
+                !wasOnline &&
+                _currentUserId != null &&
+                _chatId != null) {
+              // Mark messages as delivered and update UI
+              _markMessagesAsDeliveredAndUpdate(widget.contact.uid);
+            }
+          } catch (e) {}
+        },
+      );
     } catch (e) {}
   }
 
@@ -221,10 +225,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final currentUserId = ref.read(currentUserIdProvider);
     final chatId = ref.read(chatIdProvider);
     final isReceiverOnline = ref.read(isOnlineProvider);
+    final networkOnlineAsync = ref.read(networkConnectivityProvider);
+    final hasInternet = networkOnlineAsync.value ?? false;
 
     if (_messageController.text.trim().isEmpty ||
         currentUserId == null ||
         chatId == null) {
+      return;
+    }
+
+    // Check internet connectivity first
+    if (!hasInternet) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Message failed to send - No internet connection'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -233,6 +250,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     try {
       // Create message with appropriate status based on receiver's online status
+      // Only show delivered (double tick) if receiver is actually online
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
@@ -256,9 +274,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         userId: currentUserId,
         isTyping: false,
       );
-    } catch (e) {
-      // Silent failure
-    }
+    } catch (e) {}
   }
 
   void _onTypingChanged(String text) {
@@ -312,15 +328,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_currentUserId == null) return;
 
     if (isOnline) {
+      // Try to resume subscriptions first
       messageSubscription?.resume();
       typingSubscription?.resume();
       presenceSubscription?.resume();
+
+      // If subscriptions were null or failed, recreate them
+      if (messageSubscription == null) {
+        _subscribeToMessages();
+      }
+      if (typingSubscription == null) {
+        _subscribeToTyping();
+      }
+      if (presenceSubscription == null) {
+        _subscribeToPresence();
+      }
 
       // Update presence to online and mark messages as delivered with UI update
       ChatService.updatePresence(userId: _currentUserId!, online: true);
       if (_chatId != null) {
         _markMessagesAsDeliveredAndUpdate(_currentUserId!);
       }
+
+      // CRITICAL FIX: Reload messages when coming back online
+      // This ensures we get any messages sent while we were offline
+      _reloadMessagesAfterReconnection();
     } else {
       messageSubscription?.pause();
       typingSubscription?.pause();
@@ -331,86 +363,137 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _reloadMessagesAfterReconnection() async {
+    try {
+      final chatId = ref.read(chatIdProvider);
+      if (chatId == null) return;
+      final docs = await ChatService.getMessages(chatId);
+      if (mounted) {
+        final newMessagesList = docs.documents
+            .map((doc) => Message.fromJson(doc.data))
+            .toList();
+
+        // Only update if we have new messages
+        final currentMessages = ref.read(messagesProvider);
+        if (newMessagesList.length != currentMessages.length) {
+          ref.read(messagesProvider.notifier).state = newMessagesList;
+        }
+      }
+    } catch (e) {}
+  }
+
   // Build header with contact info
   Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      decoration: BoxDecoration(color: AppColors.primaryBlue.withOpacity(0.1)),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-            onPressed: () => Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (context) => const UserChats()),
-            ),
-          ),
-          CircleAvatar(
-            radius: 20,
-            child: ClipOval(
-              child: Image.network(
-                widget.contact.profilePicture,
-                width: 40,
-                height: 40,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Icon(
-                    Icons.person_2_outlined,
-                    color: AppColors.primaryBlue,
-                    size: 24,
-                  );
-                },
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.contact.name,
-                  style: AppTextStyles.button.copyWith(fontSize: 16),
-                ),
-                Consumer(
-                  builder: (context, ref, _) {
-                    final isTyping = ref.watch(isTypingProvider);
-                    final isContactOnline = ref.watch(isOnlineProvider);
-                    final networkOnlineAsync = ref.watch(
-                      networkConnectivityProvider,
-                    );
-                    final networkOnline = networkOnlineAsync.value ?? true;
+    return Column(
+      children: [
+        // Network status banner (only shown when sender is offline)
+        Consumer(
+          builder: (context, ref, _) {
+            final networkOnlineAsync = ref.watch(networkConnectivityProvider);
+            final networkOnline = networkOnlineAsync.value ?? true;
 
-                    return Text(
-                      !networkOnline
-                          ? 'Waiting for network...'
-                          : isTyping
-                          ? 'typing...'
-                          : isContactOnline
-                          ? 'Online'
-                          : 'Offline',
-                      style: TextStyle(
-                        color: !networkOnline
-                            ? Colors.orange
-                            : isTyping
-                            ? AppColors.primaryBlue
-                            : isContactOnline
-                            ? Colors.green
-                            : AppColors.textFooter,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    );
-                  },
+            if (!networkOnline) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                  horizontal: 16,
                 ),
-              ],
-            ),
+                color: Colors.orange,
+                child: const Text(
+                  'No internet connection - Messages cannot be sent',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+        // Chat header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.primaryBlue.withOpacity(0.1),
           ),
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: AppColors.textPrimary),
-            onPressed: () {},
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(
+                  Icons.arrow_back,
+                  color: AppColors.textPrimary,
+                ),
+                onPressed: () => Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (context) => const UserChats()),
+                ),
+              ),
+              CircleAvatar(
+                radius: 20,
+                child: ClipOval(
+                  child: Image.network(
+                    widget.contact.profilePicture,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(
+                        Icons.person_2_outlined,
+                        color: AppColors.primaryBlue,
+                        size: 24,
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.contact.name,
+                      style: AppTextStyles.button.copyWith(fontSize: 16),
+                    ),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final isTyping = ref.watch(isTypingProvider);
+                        final isContactOnline = ref.watch(isOnlineProvider);
+
+                        // FIXED: Only show receiver's actual presence status
+                        // Sender's network status does not affect receiver's status
+                        return Text(
+                          isTyping
+                              ? 'typing...'
+                              : isContactOnline
+                              ? 'Online'
+                              : 'Offline',
+                          style: TextStyle(
+                            color: isTyping
+                                ? AppColors.primaryBlue
+                                : isContactOnline
+                                ? Colors.green
+                                : AppColors.textFooter,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.more_vert, color: AppColors.textPrimary),
+                onPressed: () {},
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

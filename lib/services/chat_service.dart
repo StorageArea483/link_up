@@ -18,11 +18,11 @@ class ChatService {
     required String senderId,
     required String receiverId,
     required String text,
+    required bool receiverOnline,
   }) async {
     try {
-      // Check if receiver is online to determine initial status
-      final receiverPresence = await getUserPresence(receiverId);
-      final isReceiverOnline = receiverPresence?.data['online'] ?? false;
+      // Set status based on receiver's online status
+      final status = receiverOnline ? 'delivered' : 'sent';
 
       return await databases.createDocument(
         databaseId: databaseId,
@@ -33,7 +33,7 @@ class ChatService {
           'senderId': senderId,
           'receiverId': receiverId,
           'text': text,
-          'status': isReceiverOnline ? 'delivered' : 'sent',
+          'status': status,
           'createdAt': DateTime.now().toIso8601String(),
         },
       );

@@ -188,10 +188,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         if (!mounted) return;
         try {
           final isOnline = response.payload['online'] ?? false;
+          final wasOnline = ref.read(isOnlineProvider);
           ref.read(isOnlineProvider.notifier).state = isOnline;
 
-          // When contact comes online, mark their messages as delivered and update UI
-          if (isOnline && _currentUserId != null && _chatId != null) {
+          // When contact comes online (transition from offline to online)
+          if (isOnline && !wasOnline && _currentUserId != null && _chatId != null) {
+            // Mark messages as delivered and update UI
             _markMessagesAsDeliveredAndUpdate(widget.contact.uid);
           }
         } catch (e) {}
@@ -202,17 +204,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _checkUserPresence() async {
     try {
       final presence = await ChatService.getUserPresence(widget.contact.uid);
-      print(
-        'DEBUG: Contact ${widget.contact.name} presence: ${presence?.data}',
-      );
       if (mounted) {
         // If no presence record exists, assume user is offline
         final isOnline = presence?.data['online'] ?? false;
-        print('DEBUG: Setting contact online status to: $isOnline');
         ref.read(isOnlineProvider.notifier).state = isOnline;
       }
     } catch (e) {
-      print('DEBUG: Error checking presence: $e');
       // On error, assume user is offline
       if (mounted) {
         ref.read(isOnlineProvider.notifier).state = false;
@@ -223,6 +220,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _sendMessage() async {
     final currentUserId = ref.read(currentUserIdProvider);
     final chatId = ref.read(chatIdProvider);
+    final isReceiverOnline = ref.read(isOnlineProvider);
 
     if (_messageController.text.trim().isEmpty ||
         currentUserId == null ||
@@ -234,19 +232,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _messageController.clear();
 
     try {
-      await ChatService.sendMessage(
+      // Create message with appropriate status based on receiver's online status
+      final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
         receiverId: widget.contact.uid,
         text: messageText,
+        receiverOnline: isReceiverOnline,
       );
+
+      // Immediately add the message to the UI
+      if (messageDoc != null && mounted) {
+        final newMessage = Message.fromJson(messageDoc.data);
+        final currentMessages = ref.read(messagesProvider);
+        ref.read(messagesProvider.notifier).state = [
+          newMessage,
+          ...currentMessages,
+        ];
+      }
 
       await ChatService.setTyping(
         chatId: chatId,
         userId: currentUserId,
         isTyping: false,
       );
-    } catch (e) {}
+    } catch (e) {
+      // Silent failure
+    }
   }
 
   void _onTypingChanged(String text) {

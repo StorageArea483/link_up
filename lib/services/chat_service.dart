@@ -111,7 +111,7 @@ class ChatService {
     }
   }
 
-  static Future<void> markMessagesAsDelivered({
+  static Future<List<Document>> markMessagesAsDelivered({
     required String chatId,
     required String receiverId,
   }) async {
@@ -127,17 +127,22 @@ class ChatService {
         ],
       );
 
+      final updatedMessages = <Document>[];
+
       // Update each message to delivered status
       for (final message in messages.documents) {
-        await databases.updateDocument(
+        final updatedMessage = await databases.updateDocument(
           databaseId: databaseId,
           collectionId: messagesCollectionId,
           documentId: message.$id,
           data: {'status': 'delivered'},
         );
+        updatedMessages.add(updatedMessage);
       }
+
+      return updatedMessages;
     } catch (e) {
-      // Silent failure
+      return [];
     }
   }
 

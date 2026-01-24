@@ -77,13 +77,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Check contact's presence after setting up subscriptions
     await _checkUserPresence();
 
-    // Mark messages as delivered when user comes online
-    await ChatService.markMessagesAsDelivered(
-      chatId: chatId,
-      receiverId: userId,
-    );
+    // Mark messages as delivered when user comes online and update UI
+    await _markMessagesAsDeliveredAndUpdate(userId);
 
     ref.read(isLoadingStateProvider.notifier).state = false;
+  }
+
+  Future<void> _markMessagesAsDeliveredAndUpdate(String userId) async {
+    if (_chatId == null) return;
+
+    try {
+      final updatedMessages = await ChatService.markMessagesAsDelivered(
+        chatId: _chatId!,
+        receiverId: userId,
+      );
+
+      if (updatedMessages.isNotEmpty && mounted) {
+        // Update the messages provider with the new status
+        final currentMessages = ref.read(messagesProvider);
+        final updatedMessagesList = [...currentMessages];
+
+        for (final updatedMessage in updatedMessages) {
+          final updatedMsg = Message.fromJson(updatedMessage.data);
+          final index = updatedMessagesList.indexWhere(
+            (msg) => msg.id == updatedMsg.id,
+          );
+          if (index != -1) {
+            updatedMessagesList[index] = updatedMsg;
+          }
+        }
+
+        ref.read(messagesProvider.notifier).state = updatedMessagesList;
+      }
+    } catch (e) {
+      // Silent failure
+    }
   }
 
   Future<bool> _loadMessages() async {
@@ -154,24 +182,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _subscribeToPresence() {
     try {
-      presenceSubscription = ChatService.subscribeToPresence(
-        widget.contact.uid,
-        (response) {
-          if (!mounted) return;
-          try {
-            final isOnline = response.payload['online'] ?? false;
-            ref.read(isOnlineProvider.notifier).state = isOnline;
+      presenceSubscription = ChatService.subscribeToPresence(widget.contact.uid, (
+        response,
+      ) {
+        if (!mounted) return;
+        try {
+          final isOnline = response.payload['online'] ?? false;
+          ref.read(isOnlineProvider.notifier).state = isOnline;
 
-            // When contact comes online, mark their messages as delivered
-            if (isOnline && _currentUserId != null && _chatId != null) {
-              ChatService.markMessagesAsDelivered(
-                chatId: _chatId!,
-                receiverId: widget.contact.uid,
-              );
-            }
-          } catch (e) {}
-        },
-      );
+          // When contact comes online, mark their messages as delivered and update UI
+          if (isOnline && _currentUserId != null && _chatId != null) {
+            _markMessagesAsDeliveredAndUpdate(widget.contact.uid);
+          }
+        } catch (e) {}
+      });
     } catch (e) {}
   }
 
@@ -280,13 +304,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       typingSubscription?.resume();
       presenceSubscription?.resume();
 
-      // Update presence to online and mark messages as delivered
+      // Update presence to online and mark messages as delivered with UI update
       ChatService.updatePresence(userId: _currentUserId!, online: true);
       if (_chatId != null) {
-        ChatService.markMessagesAsDelivered(
-          chatId: _chatId!,
-          receiverId: _currentUserId!,
-        );
+        _markMessagesAsDeliveredAndUpdate(_currentUserId!);
       }
     } else {
       messageSubscription?.pause();

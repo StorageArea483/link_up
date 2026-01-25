@@ -42,6 +42,23 @@ class ChatService {
     }
   }
 
+  static Future<DocumentList> getLastMessage(String chatId) async {
+    try {
+      final result = await databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: messagesCollectionId,
+        queries: [
+          Query.equal('chatId', chatId),
+          Query.orderDesc('createdAt'),
+          Query.limit(1),
+        ],
+      );
+      return result;
+    } catch (e) {
+      return DocumentList(total: 0, documents: []);
+    }
+  }
+
   static Future<DocumentList> getMessages(String chatId) async {
     try {
       final result = await databases.listDocuments(

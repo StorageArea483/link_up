@@ -1,16 +1,24 @@
+import 'package:appwrite/models.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/pages/landing_page.dart';
+import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/providers/user_contacts_provider.dart';
 import 'package:link_up/widgets/bottom_navbar.dart';
 import 'package:link_up/widgets/chat_storage/chat_screen.dart';
 
-class UserChats extends ConsumerWidget {
+class UserChats extends ConsumerStatefulWidget {
   const UserChats({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<UserChats> createState() => _UserChatsState();
+}
+
+class _UserChatsState extends ConsumerState<UserChats> {
+  @override
+  Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -114,11 +122,45 @@ class UserChats extends ConsumerWidget {
                             contact.name,
                             style: AppTextStyles.button.copyWith(fontSize: 18),
                           ),
-                          subtitle: Text(
-                            contact.phoneNumber,
-                            style: AppTextStyles.subtitle.copyWith(
-                              fontSize: 14,
-                            ),
+                          subtitle: FutureBuilder<DocumentList>(
+                            future: () async {
+                              final currentUserId =
+                                  FirebaseAuth.instance.currentUser?.uid;
+                              if (currentUserId == null) {
+                                return DocumentList(total: 0, documents: []);
+                              }
+                              final chatId = ChatService.generateChatId(
+                                currentUserId,
+                                contact.uid,
+                              );
+                              return ChatService.getLastMessage(chatId);
+                            }(),
+                            builder: (context, snapshot) {
+                              if (snapshot.hasData &&
+                                  snapshot.data!.documents.isNotEmpty) {
+                                final lastMsg =
+                                    snapshot
+                                        .data!
+                                        .documents
+                                        .first
+                                        .data['text'] ??
+                                    '';
+                                return Text(
+                                  lastMsg,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.subtitle.copyWith(
+                                    fontSize: 14,
+                                  ),
+                                );
+                              }
+                              return Text(
+                                '',
+                                style: AppTextStyles.subtitle.copyWith(
+                                  fontSize: 14,
+                                ),
+                              );
+                            },
                           ),
                           trailing: const Icon(
                             Icons.chevron_right,

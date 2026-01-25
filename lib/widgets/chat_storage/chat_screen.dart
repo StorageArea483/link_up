@@ -226,7 +226,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final chatId = ref.read(chatIdProvider);
     final isReceiverOnline = ref.read(isOnlineProvider);
     final networkOnlineAsync = ref.read(networkConnectivityProvider);
-    final hasInternet = networkOnlineAsync.value ?? false;
+    final hasInternet = networkOnlineAsync.value ?? true;
 
     if (_messageController.text.trim().isEmpty ||
         currentUserId == null ||
@@ -353,13 +353,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // CRITICAL FIX: Reload messages when coming back online
       // This ensures we get any messages sent while we were offline
       _reloadMessagesAfterReconnection();
+
+      // Check contact's presence again as we might have missed updates
+      _checkUserPresence();
     } else {
       messageSubscription?.pause();
       typingSubscription?.pause();
       presenceSubscription?.pause();
 
-      // Update presence to offline
-      ChatService.updatePresence(userId: _currentUserId!, online: false);
+      // Update local provider to offline since we are disconnected
+      ref.read(isOnlineProvider.notifier).state = false;
     }
   }
 

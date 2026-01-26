@@ -20,4 +20,5 @@ final currentUserIdProvider = StateProvider<String?>((ref) => null);
 final chatIdProvider = StateProvider<String?>((ref) => null);
 
 // Last seen provider
-final lastSeenProvider = StateProvider<DateTime?>((ref) => null);
+// Last seen provider (String status text)
+final lastSeenProvider = StateProvider<String>((ref) => '');

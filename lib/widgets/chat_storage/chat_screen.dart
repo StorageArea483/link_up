@@ -31,7 +31,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => _initializeChat());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+        // Prevent running logic on a State that no longer exists.
+      }
+      _initializeChat();
+    });
   }
 
   @override
@@ -47,7 +53,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         userId: _currentUserId!,
         isTyping: false,
       );
-      ChatService.updatePresence(userId: _currentUserId!, online: false);
     }
     super.dispose();
   }
@@ -188,8 +193,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (!mounted) return;
           try {
             final isOnline = response.payload['online'] ?? false;
+            final lastSeenStr = response.payload['lastSeen'];
             final wasOnline = ref.read(isOnlineProvider);
+
             ref.read(isOnlineProvider.notifier).state = isOnline;
+
+            // Update Last Seen Provider
+            if (!isOnline && lastSeenStr != null) {
+              final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
+              ref.read(lastSeenProvider.notifier).state =
+                  'Last seen ${_formatTime(lastSeenTime)}';
+            } else if (!isOnline) {
+              ref.read(lastSeenProvider.notifier).state = 'Offline';
+            } else {
+              ref.read(lastSeenProvider.notifier).state = '';
+            }
 
             // When contact comes online (transition from offline to online)
             if (isOnline &&
@@ -211,7 +229,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (mounted) {
         // If no presence record exists, assume user is offline
         final isOnline = presence?.data['online'] ?? false;
+        final lastSeenStr = presence?.data['lastSeen'];
+
         ref.read(isOnlineProvider.notifier).state = isOnline;
+
+        if (!isOnline && lastSeenStr != null) {
+          final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
+          ref.read(lastSeenProvider.notifier).state =
+              'Last seen ${_formatTime(lastSeenTime)}';
+        } else if (!isOnline) {
+          ref.read(lastSeenProvider.notifier).state = 'Offline';
+        }
       }
     } catch (e) {
       // On error, assume user is offline
@@ -473,7 +501,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               ? 'typing...'
                               : isContactOnline
                               ? 'Online'
-                              : 'Offline',
+                              : ref.watch(lastSeenProvider).isEmpty
+                              ? 'Offline'
+                              : ref.watch(lastSeenProvider),
                           style: TextStyle(
                             color: isTyping
                                 ? AppColors.primaryBlue

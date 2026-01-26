@@ -238,6 +238,7 @@ class ChatService {
   static Future<bool> updatePresence({
     required String userId,
     required bool online,
+    bool clearLastSeen = false,
   }) async {
     try {
       final existingDocs = await databases.listDocuments(
@@ -246,26 +247,23 @@ class ChatService {
         queries: [Query.equal('userId', userId)],
       );
 
+      final lastSeenVal = clearLastSeen
+          ? null
+          : DateTime.now().toIso8601String();
+
       if (existingDocs.documents.isEmpty) {
         await databases.createDocument(
           databaseId: databaseId,
           collectionId: presenceCollectionId,
           documentId: ID.unique(),
-          data: {
-            'userId': userId,
-            'online': online,
-            'lastSeen': DateTime.now().toIso8601String(),
-          },
+          data: {'userId': userId, 'online': online, 'lastSeen': lastSeenVal},
         );
       } else {
         await databases.updateDocument(
           databaseId: databaseId,
           collectionId: presenceCollectionId,
           documentId: existingDocs.documents.first.$id,
-          data: {
-            'online': online,
-            'lastSeen': DateTime.now().toIso8601String(),
-          },
+          data: {'online': online, 'lastSeen': lastSeenVal},
         );
       }
       return true;

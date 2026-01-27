@@ -124,6 +124,27 @@ class ChatService {
     }
   }
 
+  static subscribeToRealtimeMessages(Function(RealtimeMessage) callback) {
+    try {
+      return realtime
+          .subscribe([
+            'databases.$databaseId.collections.$messagesCollectionId.documents',
+          ])
+          .stream
+          .listen(
+            (response) {
+              try {
+                callback(response);
+              } catch (e) {}
+            },
+            onError: (error) {},
+            cancelOnError: false,
+          );
+    } catch (e) {
+      return null;
+    }
+  }
+
   static Future<List<Document>> markMessagesAsDelivered({
     required String chatId,
     required String receiverId,

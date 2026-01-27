@@ -1,0 +1,149 @@
+import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:link_up/models/message.dart';
+
+class SqfliteHelper {
+  static Database? _database;
+  static const String _databaseName = 'chat_database.db';
+  static const int _databaseVersion = 1;
+
+  // Table name
+  static const String tableMessages = 'messages';
+
+  // Column names
+  static const String columnId = 'id';
+  static const String columnChatId = 'chatId';
+  static const String columnSenderId = 'senderId';
+  static const String columnReceiverId = 'receiverId';
+  static const String columnText = 'text';
+  static const String columnStatus = 'status';
+  static const String columnCreatedAt = 'createdAt';
+
+  /// Create a single database instance (object)
+  static Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  /// Initialize the database
+  static Future<Database> _initDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, _databaseName);
+
+    return await openDatabase(
+      // checks whether the chat_database.db file exists or not if it exists
+      // it will open the database else it will create a new database using the onCreate
+      path,
+      version: _databaseVersion,
+      onCreate: _onCreate,
+    );
+  }
+
+  /// Create the messages table
+  /// Only stores delivered messages for offline viewing
+  static Future<void> _onCreate(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE $tableMessages (
+        $columnId TEXT PRIMARY KEY,
+        $columnChatId TEXT NOT NULL,
+        $columnSenderId TEXT NOT NULL,
+        $columnReceiverId TEXT NOT NULL,
+        $columnText TEXT NOT NULL,
+        $columnStatus TEXT NOT NULL,
+        $columnCreatedAt TEXT NOT NULL
+      )
+    ''');
+  }
+
+  static Future<void> insertDeliveredMessage(Message message) async {
+    // Safety check: Only insert if status is 'delivered'
+    if (message.status != 'delivered') {
+      return; // Silently skip non-delivered messages
+    }
+
+    final db = await database; // get database object
+
+    try {
+      await db.insert(tableMessages, {
+        columnId: message.id,
+        columnChatId: message.chatId,
+        columnSenderId: message.senderId,
+        columnReceiverId: message.receiverId,
+        columnText: message.text,
+        columnStatus: message.status,
+        columnCreatedAt: message.createdAt.toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    } catch (e) {
+      // Silent failure - Appwrite is the source of truth
+    }
+  }
+
+  /// Get all delivered messages for a specific chat (for offline viewing)
+  /// Returns messages in descending order (newest first)
+  static Future<List<Message>> getDeliveredMessages(String chatId) async {
+    final db = await database;
+
+    try {
+      final List<Map<String, dynamic>> maps = await db.query(
+        tableMessages,
+        where: '$columnChatId = ?',
+        whereArgs: [chatId],
+        orderBy: '$columnCreatedAt DESC',
+      );
+
+      return maps.map((map) {
+        return Message(
+          id: map[columnId],
+          chatId: map[columnChatId],
+          senderId: map[columnSenderId],
+          receiverId: map[columnReceiverId],
+          text: map[columnText],
+          status: map[columnStatus],
+          createdAt: DateTime.parse(map[columnCreatedAt]),
+        );
+      }).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Check if a message already exists in Sqflite
+  static Future<bool> messageExists(String messageId) async {
+    final db = await database;
+
+    try {
+      final result = await db.query(
+        tableMessages,
+        where: '$columnId = ?',
+        whereArgs: [messageId],
+        limit: 1,
+      );
+      return result.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Clear all messages for a specific chat (optional utility)
+  static Future<void> clearChatMessages(String chatId) async {
+    final db = await database;
+
+    try {
+      await db.delete(
+        tableMessages,
+        where: '$columnChatId = ?',
+        whereArgs: [chatId],
+      );
+    } catch (e) {
+      // Silent failure
+    }
+  }
+
+  /// Close the database connection
+  static Future<void> close() async {
+    final db = await database;
+    await db.close();
+    _database = null;
+  }
+}

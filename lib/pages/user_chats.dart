@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:link_up/pages/landing_page.dart';
+import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/user_contacts_provider.dart';
@@ -16,7 +18,67 @@ class UserChats extends ConsumerStatefulWidget {
 }
 
 class _UserChatsState extends ConsumerState<UserChats> {
+  var _realtimeSubscription;
+
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _subscribeToRealtimeChanges();
+    });
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeToRealtimeChanges() {
+    try {
+      final currentUserId =
+          ref.read(currentUserIdProvider) ??
+          FirebaseAuth.instance.currentUser?.uid;
+
+      _realtimeSubscription = ChatService.subscribeToRealtimeMessages((
+        response,
+      ) {
+        if (!mounted) return;
+
+        try {
+          final payload = response.payload;
+          final senderId = payload['senderId'];
+          final receiverId = payload['receiverId'];
+
+          // If I am the receiver, refresh unread count from sender
+          if (receiverId == currentUserId) {
+            ref.invalidate(unreadCountProvider(senderId));
+            ref.invalidate(lastMessageProvider(senderId));
+          }
+
+          // If I am the sender, refresh last message for receiver (to update "You: ...")
+          if (senderId == currentUserId) {
+            ref.invalidate(lastMessageProvider(receiverId));
+            // Also refresh unread count for receiver just in case (e.g. status update)
+            // But usually unread count for contact is irrelevant here unless we display send receipts
+          }
+
+          // Also handle status updates (e.g. read receipts)
+          // If a message status changes, we might need to update unread count
+          if (response.events.any((e) => e.contains('.update'))) {
+            if (receiverId == currentUserId) {
+              ref.invalidate(unreadCountProvider(senderId));
+            }
+          }
+        } catch (e) {
+          debugPrint('Error handling realtime message: $e');
+        }
+      });
+    } catch (e) {
+      debugPrint('Error subscribing to realtime messages: $e');
+    }
+  }
+
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
@@ -181,6 +243,7 @@ class _UserChatsState extends ConsumerState<UserChats> {
                             color: AppColors.textSecondary,
                           ),
                           onTap: () {
+                            ref.invalidate(unreadCountProvider(contact.uid));
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
                                 builder: (context) => CheckConnection(

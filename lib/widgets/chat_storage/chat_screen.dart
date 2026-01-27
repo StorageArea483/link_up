@@ -10,6 +10,7 @@ import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/widgets/check_connection.dart';
+import 'package:link_up/database/sqflite_helper.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final UserContacts contact;
@@ -117,6 +118,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (index != -1) {
             updatedMessagesList[index] = updatedMsg;
           }
+
+          // ✅ SAVE TO SQFLITE: Now that message is 'delivered', store it locally
+          // This allows offline viewing of delivered messages
+          // ❌ We do NOT save 'sent' messages - only 'delivered' ones
+          await SqfliteHelper.insertDeliveredMessage(updatedMsg);
         }
 
         ref.read(messagesProvider.notifier).state = updatedMessagesList;
@@ -133,14 +139,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ); // indicating current chat between users
       if (chatId == null) return false;
 
+      // Try to load from Appwrite first (online)
       final docs = await ChatService.getMessages(chatId);
       if (mounted) {
         final messagesList = docs.documents
             .map((doc) => Message.fromJson(doc.data))
             .toList();
-        ref.read(messagesProvider.notifier).state = messagesList;
+
+        if (messagesList.isNotEmpty) {
+          // Successfully loaded from Appwrite
+          ref.read(messagesProvider.notifier).state = messagesList;
+        } else {
+          // No messages from Appwrite, try loading from Sqflite (offline)
+          // ✅ Sqflite contains ONLY delivered messages for offline viewing
+          final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+            chatId,
+          );
+          ref.read(messagesProvider.notifier).state = offlineMessages;
+        }
       }
     } catch (e) {
+      // If Appwrite fails (offline), load from Sqflite
+      // ✅ This shows only delivered messages when offline
+      final chatId = ref.read(chatIdProvider);
+      if (chatId != null && mounted) {
+        final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+          chatId,
+        );
+        ref.read(messagesProvider.notifier).state = offlineMessages;
+      }
       return false;
     }
     return true;
@@ -167,11 +194,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             final updatedMessages = [...currentMessages];
             updatedMessages[existingIndex] = newMessage;
             ref.read(messagesProvider.notifier).state = updatedMessages;
+
+            // ✅ SAVE TO SQFLITE: If message status changed to 'delivered', store it
+            // This happens when receiver opens the chat and message gets delivered
+            if (newMessage.status == 'delivered') {
+              SqfliteHelper.insertDeliveredMessage(newMessage);
+            }
           } else {
             ref.read(messagesProvider.notifier).state = [
               newMessage,
               ...currentMessages,
             ];
+
+            // ✅ SAVE TO SQFLITE: If new message is already 'delivered', store it
+            // ❌ DO NOT save if status is 'sent' - only save 'delivered' messages
+            if (newMessage.status == 'delivered') {
+              SqfliteHelper.insertDeliveredMessage(newMessage);
+            }
           }
         } catch (e) {}
       });
@@ -311,6 +350,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     try {
       // Create message with 'sent' status - will be updated to 'delivered' when receiver actually receives it
+      // ❌ DO NOT save to Sqflite here - message is only 'sent', not 'delivered' yet
+      // ✅ Message will be saved to Sqflite ONLY when status becomes 'delivered'
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
@@ -440,6 +481,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     try {
       final chatId = ref.read(chatIdProvider);
       if (chatId == null) return;
+
       final docs = await ChatService.getMessages(chatId);
       if (mounted) {
         final newMessagesList = docs.documents
@@ -450,6 +492,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final currentMessages = ref.read(messagesProvider);
         if (newMessagesList.length != currentMessages.length) {
           ref.read(messagesProvider.notifier).state = newMessagesList;
+
+          // ✅ SAVE DELIVERED MESSAGES TO SQFLITE: After reconnection, save any delivered messages
+          // This ensures offline history is up-to-date with delivered messages
+          for (final message in newMessagesList) {
+            if (message.status == 'delivered') {
+              await SqfliteHelper.insertDeliveredMessage(message);
+            }
+          }
         }
       }
     } catch (e) {}

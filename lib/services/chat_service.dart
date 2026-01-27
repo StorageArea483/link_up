@@ -112,6 +112,7 @@ class ChatService {
             (response) {
               try {
                 if (response.payload['userId'] == userId) {
+                  // checking presence for reciever
                   callback(response);
                 }
               } catch (e) {}
@@ -150,7 +151,8 @@ class ChatService {
     required String receiverId,
   }) async {
     try {
-      // Get all undelivered messages for this receiver
+      // Step 1: Get all undelivered messages for this receiver
+      // Only fetch messages with status 'sent' that are meant for this receiver
       final messages = await databases.listDocuments(
         databaseId: databaseId,
         collectionId: messagesCollectionId,
@@ -163,7 +165,8 @@ class ChatService {
 
       final updatedMessages = <Document>[];
 
-      // Update each message to delivered status
+      // Step 2: Update each message to 'delivered' status
+      // This indicates the receiver has opened the chat and received the message
       for (final message in messages.documents) {
         final updatedMessage = await databases.updateDocument(
           databaseId: databaseId,
@@ -177,6 +180,19 @@ class ChatService {
       return updatedMessages;
     } catch (e) {
       return [];
+    }
+  }
+
+  static Future<bool> deleteMessageFromAppwrite(String messageId) async {
+    try {
+      await databases.deleteDocument(
+        databaseId: databaseId,
+        collectionId: messagesCollectionId,
+        documentId: messageId,
+      );
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -253,20 +269,22 @@ class ChatService {
   }
 
   static Future<bool> updatePresence({
-    required String userId,
-    required bool online,
+    required String userId, // current persons using the app userId
+    required bool online, // true if online false if offline
     bool clearLastSeen = false,
   }) async {
     try {
       final existingDocs = await databases.listDocuments(
         databaseId: databaseId,
         collectionId: presenceCollectionId,
-        queries: [Query.equal('userId', userId)],
+        queries: [
+          Query.equal('userId', userId),
+        ], // checking is user exists or not
       );
 
       final lastSeenVal = clearLastSeen
           ? null
-          : DateTime.now().toIso8601String();
+          : DateTime.now().toIso8601String(); // setting last seen time
 
       if (existingDocs.documents.isEmpty) {
         await databases.createDocument(
@@ -274,7 +292,7 @@ class ChatService {
           collectionId: presenceCollectionId,
           documentId: ID.unique(),
           data: {'userId': userId, 'online': online, 'lastSeen': lastSeenVal},
-        );
+        ); // a new doc will get created with the respected status
       } else {
         await databases.updateDocument(
           databaseId: databaseId,

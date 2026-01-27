@@ -1,5 +1,5 @@
-import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 import 'package:link_up/models/message.dart';
 
 class SqfliteHelper {
@@ -19,7 +19,7 @@ class SqfliteHelper {
   static const String columnStatus = 'status';
   static const String columnCreatedAt = 'createdAt';
 
-  /// Create a single database instance (object)
+  /// Get database instance (singleton pattern)
   static Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDatabase();
@@ -32,8 +32,6 @@ class SqfliteHelper {
     final path = join(dbPath, _databaseName);
 
     return await openDatabase(
-      // checks whether the chat_database.db file exists or not if it exists
-      // it will open the database else it will create a new database using the onCreate
       path,
       version: _databaseVersion,
       onCreate: _onCreate,
@@ -56,13 +54,12 @@ class SqfliteHelper {
     ''');
   }
 
-  static Future<void> insertDeliveredMessage(Message message) async {
-    // Safety check: Only insert if status is 'delivered'
+  static Future<bool> insertDeliveredMessage(Message message) async {
     if (message.status != 'delivered') {
-      return; // Silently skip non-delivered messages
+      return false;
     }
 
-    final db = await database; // get database object
+    final db = await database;
 
     try {
       await db.insert(tableMessages, {
@@ -74,13 +71,13 @@ class SqfliteHelper {
         columnStatus: message.status,
         columnCreatedAt: message.createdAt.toIso8601String(),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      return true;
     } catch (e) {
-      // Silent failure - Appwrite is the source of truth
+      return false;
     }
   }
 
-  /// Get all delivered messages for a specific chat (for offline viewing)
-  /// Returns messages in descending order (newest first)
   static Future<List<Message>> getDeliveredMessages(String chatId) async {
     final db = await database;
 
@@ -91,6 +88,8 @@ class SqfliteHelper {
         whereArgs: [chatId],
         orderBy: '$columnCreatedAt DESC',
       );
+
+      if (maps.isEmpty) return [];
 
       return maps.map((map) {
         return Message(

@@ -36,10 +36,8 @@ class _CheckConnectionState extends State<CheckConnection>
       ChatService.updatePresence(userId: user.uid, online: true);
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      // Background/Inactive -> Updates Last Seen to now
       ChatService.updatePresence(userId: user.uid, online: false);
     } else if (state == AppLifecycleState.detached) {
-      // Terminated -> Clears Last Seen so it shows as Offline
       ChatService.updatePresence(
         userId: user.uid,
         online: false,
@@ -60,11 +58,8 @@ class _CheckConnectionState extends State<CheckConnection>
             ),
           );
         }
-
-        // Update presence when user logs in or app starts with user logged in
         if (snapshot.hasData) {
           final user = snapshot.data!;
-          // Ensure we are online when the app loads/user logs in
           ChatService.updatePresence(userId: user.uid, online: true);
           return const LandingPage();
         } else {

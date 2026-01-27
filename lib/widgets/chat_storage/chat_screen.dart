@@ -60,7 +60,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _initializeChat() async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     _currentUserId = userId;
-    ref.read(currentUserIdProvider.notifier).state = userId;
+    ref.read(currentUserIdProvider.notifier).state =
+        userId; // this provider indicates the current user using the app
 
     if (userId == null) {
       ref.read(isLoadingStateProvider.notifier).state = false;
@@ -69,10 +70,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final chatId = ChatService.generateChatId(userId, widget.contact.uid);
     _chatId = chatId;
-    ref.read(chatIdProvider.notifier).state = chatId;
+    ref.read(chatIdProvider.notifier).state =
+        chatId; // the current chat id between authenticated users
 
     // Set current user as online
-    await ChatService.updatePresence(userId: userId, online: true);
+    await ChatService.updatePresence(
+      userId: userId,
+      online: true,
+    ); // updating the current users presence to online
 
     await _loadMessages();
     _subscribeToMessages();
@@ -121,7 +126,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<bool> _loadMessages() async {
     try {
-      final chatId = ref.read(chatIdProvider);
+      final chatId = ref.read(
+        chatIdProvider,
+      ); // indicating current chat between users
       if (chatId == null) return false;
 
       final docs = await ChatService.getMessages(chatId);
@@ -138,7 +145,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _subscribeToMessages() {
-    final chatId = ref.read(chatIdProvider);
+    final chatId = ref.read(
+      chatIdProvider,
+    ); // current chat id between the two users
     if (chatId == null) return;
 
     try {
@@ -226,12 +235,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _checkUserPresence() async {
     try {
       final presence = await ChatService.getUserPresence(widget.contact.uid);
+      // checking the presence of the reciever
       if (mounted) {
         // If no presence record exists, assume user is offline
         final isOnline = presence?.data['online'] ?? false;
         final lastSeenStr = presence?.data['lastSeen'];
 
-        ref.read(isOnlineProvider.notifier).state = isOnline;
+        ref.read(isOnlineProvider.notifier).state =
+            isOnline; // provider for updating the online\offline\lastSeen status of the other user
 
         if (!isOnline && lastSeenStr != null) {
           final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
@@ -252,7 +263,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _sendMessage() async {
     final currentUserId = ref.read(currentUserIdProvider);
     final chatId = ref.read(chatIdProvider);
-    final isReceiverOnline = ref.read(isOnlineProvider);
     final networkOnlineAsync = ref.read(networkConnectivityProvider);
     final hasInternet = networkOnlineAsync.value ?? true;
 
@@ -277,14 +287,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _messageController.clear();
 
     try {
-      // Create message with appropriate status based on receiver's online status
-      // Only show delivered (double tick) if receiver is actually online
+      // Create message with 'sent' status - will be updated to 'delivered' when receiver actually receives it
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
         receiverId: widget.contact.uid,
         text: messageText,
-        receiverOnline: isReceiverOnline,
       );
 
       // Immediately add the message to the UI

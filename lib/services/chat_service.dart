@@ -18,12 +18,8 @@ class ChatService {
     required String senderId,
     required String receiverId,
     required String text,
-    required bool receiverOnline,
   }) async {
     try {
-      // Set status based on receiver's online status
-      final status = receiverOnline ? 'delivered' : 'sent';
-
       return await databases.createDocument(
         databaseId: databaseId,
         collectionId: messagesCollectionId,
@@ -33,7 +29,7 @@ class ChatService {
           'senderId': senderId,
           'receiverId': receiverId,
           'text': text,
-          'status': status,
+          'status': 'sent',
           'createdAt': DateTime.now().toIso8601String(),
         },
       );
@@ -282,6 +278,26 @@ class ChatService {
       return docs.documents.isNotEmpty ? docs.documents.first : null;
     } catch (e) {
       return null;
+    }
+  }
+
+  static Future<int> getUnreadCount({
+    required String chatId,
+    required String receiverId,
+  }) async {
+    try {
+      final result = await databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: messagesCollectionId,
+        queries: [
+          Query.equal('chatId', chatId),
+          Query.equal('receiverId', receiverId),
+          Query.equal('status', 'sent'),
+        ],
+      );
+      return result.total;
+    } catch (e) {
+      return 0;
     }
   }
 }

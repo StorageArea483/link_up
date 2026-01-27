@@ -36,7 +36,8 @@ final unreadCountProvider = FutureProvider.family<int, String>((
   final chatId = ChatService.generateChatId(currentUserId, contactId);
   return ChatService.getUnreadCount(
     chatId: chatId,
-    receiverId: contactId, // Based on user's last edit: receiver is the contact
+    receiverId:
+        currentUserId, // Based on user's last edit: receiver is the contact
   );
 });
 

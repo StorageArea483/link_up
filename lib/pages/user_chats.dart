@@ -6,6 +6,7 @@ import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/user_contacts_provider.dart';
 import 'package:link_up/widgets/bottom_navbar.dart';
 import 'package:link_up/widgets/chat_storage/chat_screen.dart';
+import 'package:link_up/widgets/check_connection.dart';
 
 class UserChats extends ConsumerStatefulWidget {
   const UserChats({super.key});
@@ -22,7 +23,9 @@ class _UserChatsState extends ConsumerState<UserChats> {
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const LandingPage()),
+          MaterialPageRoute(
+            builder: (context) => const CheckConnection(child: LandingPage()),
+          ),
         );
       },
       child: Scaffold(
@@ -35,7 +38,10 @@ class _UserChatsState extends ConsumerState<UserChats> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
             onPressed: () => Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (context) => const LandingPage()),
+              MaterialPageRoute(
+                builder: (context) =>
+                    const CheckConnection(child: LandingPage()),
+              ),
             ),
           ),
         ),
@@ -177,8 +183,9 @@ class _UserChatsState extends ConsumerState<UserChats> {
                           onTap: () {
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
-                                builder: (context) =>
-                                    ChatScreen(contact: contact),
+                                builder: (context) => CheckConnection(
+                                  child: ChatScreen(contact: contact),
+                                ),
                               ),
                             );
                           },

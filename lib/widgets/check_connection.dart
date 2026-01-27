@@ -1,12 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:link_up/pages/google_signup.dart';
-import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 
 class CheckConnection extends StatefulWidget {
-  const CheckConnection({super.key});
+  final Widget child;
+  const CheckConnection({super.key, required this.child});
 
   @override
   State<CheckConnection> createState() => _CheckConnectionState();
@@ -34,8 +34,8 @@ class _CheckConnectionState extends State<CheckConnection>
 
     if (state == AppLifecycleState.resumed) {
       ChatService.updatePresence(userId: user.uid, online: true);
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+    } else if (state == AppLifecycleState.paused) {
+      // Use paused for backgrounding to ensure reliable 'last seen' set
       ChatService.updatePresence(userId: user.uid, online: false);
     } else if (state == AppLifecycleState.detached) {
       ChatService.updatePresence(
@@ -61,7 +61,7 @@ class _CheckConnectionState extends State<CheckConnection>
         if (snapshot.hasData) {
           final user = snapshot.data!;
           ChatService.updatePresence(userId: user.uid, online: true);
-          return const LandingPage();
+          return widget.child;
         } else {
           return const GoogleSignup();
         }

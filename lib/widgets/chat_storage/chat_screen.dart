@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/models/user_contacts.dart';
+import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/pages/user_chats.dart';
+import 'package:link_up/widgets/check_connection.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final UserContacts contact;
@@ -203,15 +205,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           try {
             final isOnline = response.payload['online'] ?? false;
             final lastSeenStr = response.payload['lastSeen'];
-            final wasOnline = ref.read(isOnlineProvider);
 
             ref.read(isOnlineProvider.notifier).state = isOnline;
 
-            // Update Last Seen Provider
-            if (!isOnline && lastSeenStr != null) {
-              final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
-              ref.read(lastSeenProvider.notifier).state =
-                  'Last seen ${_formatTime(lastSeenTime)}';
+            // Update Last Seen Provider with robust parsing
+            if (!isOnline &&
+                lastSeenStr != null &&
+                lastSeenStr.toString().isNotEmpty) {
+              try {
+                final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
+                ref.read(lastSeenProvider.notifier).state =
+                    'Last seen ${_formatTime(lastSeenTime)}';
+              } catch (e) {
+                // Fallback if date parsing fails
+                ref.read(lastSeenProvider.notifier).state = 'Offline';
+              }
             } else if (!isOnline) {
               ref.read(lastSeenProvider.notifier).state = 'Offline';
             } else {
@@ -219,18 +227,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             }
 
             // When contact comes online (transition from offline to online)
+            // Note: We use the local variable isOnline here
             if (isOnline &&
-                !wasOnline &&
+                !_isOnlineProviderValue && // Use local check effectively
                 _currentUserId != null &&
                 _chatId != null) {
-              // Mark messages as delivered and update UI
+              // Update UI for messages
               _markMessagesAsDeliveredAndUpdate(widget.contact.uid);
             }
-          } catch (e) {}
+          } catch (e) {
+            debugPrint('Error in presence listener: $e');
+          }
         },
       );
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('Error subscribing to presence: $e');
+    }
   }
+
+  // Helper to check current provider value to detect transition
+  bool get _isOnlineProviderValue => ref.read(isOnlineProvider);
 
   Future<void> _checkUserPresence() async {
     try {
@@ -244,10 +260,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ref.read(isOnlineProvider.notifier).state =
             isOnline; // provider for updating the online\offline\lastSeen status of the other user
 
-        if (!isOnline && lastSeenStr != null) {
-          final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
-          ref.read(lastSeenProvider.notifier).state =
-              'Last seen ${_formatTime(lastSeenTime)}';
+        if (!isOnline &&
+            lastSeenStr != null &&
+            lastSeenStr.toString().isNotEmpty) {
+          try {
+            final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
+            ref.read(lastSeenProvider.notifier).state =
+                'Last seen ${_formatTime(lastSeenTime)}';
+          } catch (e) {
+            ref.read(lastSeenProvider.notifier).state = 'Offline';
+          }
         } else if (!isOnline) {
           ref.read(lastSeenProvider.notifier).state = 'Offline';
         }
@@ -256,6 +278,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // On error, assume user is offline
       if (mounted) {
         ref.read(isOnlineProvider.notifier).state = false;
+        ref.read(lastSeenProvider.notifier).state = 'Offline';
       }
     }
   }
@@ -346,15 +369,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     });
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildMessagesList(),
-            _buildInputSection(),
-          ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const CheckConnection(child: LandingPage()),
+          ),
+        );
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              _buildMessagesList(),
+              _buildInputSection(),
+            ],
+          ),
         ),
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/styles/styles.dart';
+import 'package:link_up/widgets/check_connection.dart';
 
 class BottomNavbar extends StatelessWidget {
   final int currentIndex;
@@ -52,7 +53,9 @@ class BottomNavbar extends StatelessWidget {
         } else if (index == 1) {
         } else if (index == 2) {
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const UserChats()),
+            MaterialPageRoute(
+              builder: (context) => const CheckConnection(child: UserChats()),
+            ),
           );
         } else {}
       },

@@ -26,7 +26,7 @@ final chatIdProvider = StateProvider<String?>((ref) => null);
 final lastSeenProvider = StateProvider<String>((ref) => '');
 
 // Unread count provider (Family: contactId)
-final unreadCountProvider = FutureProvider.family<int, String>((
+final unreadCountProvider = FutureProvider.autoDispose.family<int, String>((
   ref,
   contactId,
 ) async {

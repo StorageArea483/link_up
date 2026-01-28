@@ -35,6 +35,7 @@ class _UserChatsState extends ConsumerState<UserChats> {
   }
 
   void _subscribeToRealtimeChanges() {
+    // subscribing to all recieved messages from a collection in real time
     try {
       final currentUserId =
           ref.read(currentUserIdProvider) ??
@@ -46,6 +47,7 @@ class _UserChatsState extends ConsumerState<UserChats> {
         if (!mounted) return;
 
         try {
+          // only those messages with sent status will only be allowed
           final payload = response.payload;
           final senderId = payload['senderId'];
           final receiverId = payload['receiverId'];
@@ -56,27 +58,13 @@ class _UserChatsState extends ConsumerState<UserChats> {
             ref.invalidate(lastMessageProvider(senderId));
           }
 
-          // If I am the sender, refresh last message for receiver (to update "You: ...")
+          // If I am the sender, refresh last message for receiver
           if (senderId == currentUserId) {
             ref.invalidate(lastMessageProvider(receiverId));
-            // Also refresh unread count for receiver just in case (e.g. status update)
-            // But usually unread count for contact is irrelevant here unless we display send receipts
           }
-
-          // Also handle status updates (e.g. read receipts)
-          // If a message status changes, we might need to update unread count
-          if (response.events.any((e) => e.contains('.update'))) {
-            if (receiverId == currentUserId) {
-              ref.invalidate(unreadCountProvider(senderId));
-            }
-          }
-        } catch (e) {
-          debugPrint('Error handling realtime message: $e');
-        }
+        } catch (e) {}
       });
-    } catch (e) {
-      debugPrint('Error subscribing to realtime messages: $e');
-    }
+    } catch (e) {}
   }
 
   @override

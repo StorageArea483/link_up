@@ -127,6 +127,7 @@ class ChatService {
 
   static subscribeToRealtimeMessages(Function(RealtimeMessage) callback) {
     try {
+      // we will have to subscribe to all documents messages that comes in the collection
       return realtime
           .subscribe([
             'databases.$databaseId.collections.$messagesCollectionId.documents',
@@ -135,7 +136,9 @@ class ChatService {
           .listen(
             (response) {
               try {
-                callback(response);
+                if (response.payload['status'] == 'sent') {
+                  callback(response);
+                }
               } catch (e) {}
             },
             onError: (error) {},

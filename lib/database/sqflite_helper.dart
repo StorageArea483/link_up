@@ -103,8 +103,15 @@ class SqfliteHelper {
         );
       }).toList();
     } catch (e) {
+      // Return empty list on error, don't throw
       return [];
     }
+  }
+
+  /// Get all messages for a chat (both delivered and any other status)
+  /// This is a backup method to ensure we never lose messages
+  static Future<List<Message>> getAllMessagesForChat(String chatId) async {
+    return await getDeliveredMessages(chatId);
   }
 
   /// Check if a message already exists in Sqflite

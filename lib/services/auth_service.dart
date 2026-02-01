@@ -8,7 +8,9 @@ class GoogleSignInService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email'],
-    // Disable serverClientId to avoid People API requirement
+    // Add the web client ID for Android
+    serverClientId:
+        '1056625974316-te97t1v0fshofno1av7uldjngnmht063.apps.googleusercontent.com',
   );
 
   // Sign in with Google

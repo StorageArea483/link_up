@@ -38,6 +38,7 @@ class _CheckConnectionState extends State<CheckConnection>
       // Use paused for backgrounding to ensure reliable 'last seen' set
       ChatService.updatePresence(userId: user.uid, online: false);
     } else if (state == AppLifecycleState.detached) {
+      debugPrint("App closed successfully");
       ChatService.updatePresence(
         userId: user.uid,
         online: false,

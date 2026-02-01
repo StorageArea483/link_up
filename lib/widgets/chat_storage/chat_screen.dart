@@ -31,6 +31,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   String? _chatId;
   bool _wasOnline = true;
 
+  // Helper method to merge messages without losing any
+  List<Message> _mergeMessages(
+    List<Message> newMessages,
+    List<Message> existingMessages,
+  ) {
+    final messageMap = <String, Message>{};
+
+    // Add existing messages first
+    for (final msg in existingMessages) {
+      messageMap[msg.id] = msg;
+    }
+
+    // Add or update with new messages
+    for (final msg in newMessages) {
+      messageMap[msg.id] = msg;
+    }
+
+    // Convert back to list and sort by creation time (newest first)
+    final mergedList = messageMap.values.toList();
+    mergedList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    return mergedList;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -117,6 +141,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
           if (index != -1) {
             updatedMessagesList[index] = updatedMsg;
+          } else {
+            // If message not found in current list, add it
+            updatedMessagesList.insert(0, updatedMsg);
           }
 
           final savedSuccessfully = await SqfliteHelper.insertDeliveredMessage(
@@ -128,9 +155,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           }
         }
 
+        // Sort by creation time (newest first) to maintain order
+        updatedMessagesList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         ref.read(messagesProvider.notifier).state = updatedMessagesList;
+      } else if (mounted) {
+        // No new delivered messages, but ensure we have offline messages loaded
+        final currentMessages = ref.read(messagesProvider);
+        if (currentMessages.isEmpty) {
+          final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+            _chatId!,
+          );
+          ref.read(messagesProvider.notifier).state = offlineMessages;
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      // On error, ensure we still have offline messages if current list is empty
+      if (mounted) {
+        final currentMessages = ref.read(messagesProvider);
+        if (currentMessages.isEmpty) {
+          final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+            _chatId!,
+          );
+          ref.read(messagesProvider.notifier).state = offlineMessages;
+        }
+      }
+    }
   }
 
   Future<bool> _loadMessages() async {
@@ -140,23 +189,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ); // indicating current chat between users
       if (chatId == null) return false;
 
-      // Try to load from Appwrite the sent status messages
+      // Always try to load from SQLite first to get delivered messages
+      final offlineMessages = await SqfliteHelper.getDeliveredMessages(chatId);
+
+      // Try to load from Appwrite for sent status messages
       final docs = await ChatService.getMessages(chatId);
       if (mounted) {
-        final messagesList = docs.documents
+        final sentMessages = docs.documents
             .map((doc) => Message.fromJson(doc.data))
             .toList(); // sent status messages list
 
-        if (messagesList.isNotEmpty) {
-          ref.read(messagesProvider.notifier).state = messagesList;
-        } else {
-          final offlineMessages = await SqfliteHelper.getDeliveredMessages(
-            chatId,
-          );
-          ref.read(messagesProvider.notifier).state = offlineMessages;
-        }
+        // Merge offline and online messages using helper method
+        final allMessages = _mergeMessages(sentMessages, offlineMessages);
+        ref.read(messagesProvider.notifier).state = allMessages;
       }
     } catch (e) {
+      // On error, load from SQLite only
       final chatId = ref.read(chatIdProvider);
       if (chatId != null && mounted) {
         final offlineMessages = await SqfliteHelper.getDeliveredMessages(
@@ -464,7 +512,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (_chatId != null) {
         _markMessagesAsDeliveredAndUpdate(_currentUserId!);
       }
-      _reloadMessagesAfterReconnection();
+
+      // Only reload messages if we don't have any messages currently
+      final currentMessages = ref.read(messagesProvider);
+      if (currentMessages.isEmpty) {
+        _reloadMessagesAfterReconnection();
+      }
 
       _checkUserPresence();
     } else {
@@ -482,6 +535,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final chatId = ref.read(chatIdProvider);
       if (chatId == null) return;
 
+      // Get current messages to preserve them
+      final currentMessages = ref.read(messagesProvider);
+
       // Step 1: Fetch latest messages from Appwrite
       final docs = await ChatService.getMessages(chatId);
       if (mounted) {
@@ -489,26 +545,51 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             .map((doc) => Message.fromJson(doc.data))
             .toList();
 
-        // Step 2: Only update if we have new messages
-        final currentMessages = ref.read(messagesProvider);
-        if (newMessagesList.length != currentMessages.length) {
-          ref.read(messagesProvider.notifier).state = newMessagesList;
+        // Step 2: Merge messages intelligently using helper method
+        if (newMessagesList.isNotEmpty) {
+          // Merge new messages with existing ones
+          final mergedMessages = _mergeMessages(
+            newMessagesList,
+            currentMessages,
+          );
 
-          for (final message in newMessagesList) {
-            if (message.status == 'delivered') {
-              // Save to Sqflite first
+          // Process delivered messages
+          for (final newMsg in newMessagesList) {
+            if (newMsg.status == 'delivered') {
               final savedSuccessfully =
-                  await SqfliteHelper.insertDeliveredMessage(message);
-
-              // Delete from Appwrite only if save was successful
+                  await SqfliteHelper.insertDeliveredMessage(newMsg);
               if (savedSuccessfully) {
-                await ChatService.deleteMessageFromAppwrite(message.id);
+                await ChatService.deleteMessageFromAppwrite(newMsg.id);
               }
             }
           }
+
+          ref.read(messagesProvider.notifier).state = mergedMessages;
+        } else {
+          // No new messages from Appwrite, but don't clear existing messages
+          // Only load from SQLite if we have no messages at all
+          if (currentMessages.isEmpty) {
+            final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+              chatId,
+            );
+            ref.read(messagesProvider.notifier).state = offlineMessages;
+          }
+          // If we have existing messages, keep them as they are
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      // On error, don't clear existing messages
+      // Only load from SQLite if we have no messages at all
+      final chatId = ref.read(chatIdProvider);
+      final currentMessages = ref.read(messagesProvider);
+
+      if (chatId != null && currentMessages.isEmpty && mounted) {
+        final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+          chatId,
+        );
+        ref.read(messagesProvider.notifier).state = offlineMessages;
+      }
+    }
   }
 
   // Build header with contact info

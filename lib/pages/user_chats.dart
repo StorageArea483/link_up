@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:link_up/models/message.dart';
 import 'package:link_up/pages/landing_page.dart';
+import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/user_contacts_provider.dart';
+import 'package:link_up/widgets/app_error_widget.dart';
 import 'package:link_up/widgets/bottom_navbar.dart';
 import 'package:link_up/widgets/chat_storage/chat_screen.dart';
 import 'package:link_up/widgets/check_connection.dart';
@@ -18,57 +21,107 @@ class UserChats extends ConsumerStatefulWidget {
 }
 
 class _UserChatsState extends ConsumerState<UserChats> {
-  var _realtimeSubscription;
+  var messageSubscription;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _subscribeToRealtimeChanges();
+      _initializeText();
     });
   }
 
   @override
   void dispose() {
-    _realtimeSubscription?.cancel();
+    messageSubscription?.cancel();
     super.dispose();
   }
 
-  void _subscribeToRealtimeChanges() {
-    // subscribing to all recieved messages from a collection in real time
+  void _subscribeToMessages() {
     try {
-      final currentUserId =
-          ref.read(currentUserIdProvider) ??
-          FirebaseAuth.instance.currentUser?.uid;
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
 
-      _realtimeSubscription = ChatService.subscribeToRealtimeMessages((
-        response,
-      ) {
+      // Subscribe to all messages with status 'sent'
+      messageSubscription = ChatService.subscribeToRealtimeMessages((message) {
         if (!mounted) return;
 
         try {
-          // only those messages with sent status will only be allowed
-          final payload = response.payload;
-          final senderId = payload['senderId'];
-          final receiverId = payload['receiverId'];
+          final newMessage = Message.fromJson(message.payload);
 
-          // If I am the receiver, refresh unread count from sender
-          if (receiverId == currentUserId) {
-            ref.invalidate(unreadCountProvider(senderId));
-            ref.invalidate(lastMessageProvider(senderId));
-          }
+          // Check if this message is relevant to the current user
+          // (either sent by them or sent to them)
+          if (newMessage.senderId == currentUserId ||
+              newMessage.receiverId == currentUserId) {
+            // Determine which contact's providers need to be updated
+            final contactId = newMessage.senderId == currentUserId
+                ? newMessage.receiverId
+                : newMessage.senderId;
 
-          // If I am the sender, refresh last message for receiver
-          if (senderId == currentUserId) {
-            ref.invalidate(lastMessageProvider(receiverId));
+            // Invalidate the providers to trigger a refresh
+            ref.invalidate(lastMessageProvider(contactId));
+            ref.invalidate(unreadCountProvider(contactId));
           }
-        } catch (e) {}
+        } catch (e) {
+          // Handle parsing errors silently
+        }
       });
-    } catch (e) {}
+    } catch (e) {
+      messageSubscription?.cancel();
+    }
+  }
+
+  Future<void> _initializeText() async {
+    _subscribeToMessages();
+
+    // Check initial network connectivity
+    try {
+      final isOnline = await ref.read(networkConnectivityProvider.future);
+      if (!isOnline) {
+        messageSubscription?.pause();
+      } else {
+        messageSubscription?.resume();
+      }
+    } catch (e) {
+      // Handle connectivity check error
+    }
+
+    // Pre-warm the providers for better performance
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId != null) {
+      try {
+        // This will trigger the providers to start loading data
+        final contacts = await ref.read(userContactProvider.future);
+        for (final contact in contacts) {
+          // Pre-load last messages and unread counts for all contacts
+          ref.read(lastMessageProvider(contact.uid));
+          ref.read(unreadCountProvider(contact.uid));
+        }
+      } catch (e) {
+        // Handle errors silently
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Listen to network connectivity changes in build method
+    ref.listen(networkConnectivityProvider, (previous, next) {
+      next.when(
+        data: (isOnline) {
+          if (isOnline) {
+            messageSubscription?.resume();
+            // Refresh all providers when coming back online
+            ref.invalidate(userContactProvider);
+          } else {
+            messageSubscription?.pause();
+          }
+        },
+        loading: () {},
+        error: (_, __) {},
+      );
+    });
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -214,15 +267,31 @@ class _UserChatsState extends ConsumerState<UserChats> {
                           ),
                           subtitle: Consumer(
                             builder: (context, ref, _) {
-                              final lastMsgAsync = ref.watch(
+                              final lastMessageAsync = ref.watch(
                                 lastMessageProvider(contact.uid),
                               );
-                              return Text(
-                                lastMsgAsync.value ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.subtitle.copyWith(
-                                  fontSize: 14,
+                              return lastMessageAsync.when(
+                                data: (lastMessage) => Text(
+                                  lastMessage.isEmpty
+                                      ? 'No messages yet'
+                                      : lastMessage,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.subtitle.copyWith(
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                loading: () => Text(
+                                  'Loading...',
+                                  style: AppTextStyles.subtitle.copyWith(
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                error: (_, __) => Text(
+                                  'No messages yet',
+                                  style: AppTextStyles.subtitle.copyWith(
+                                    fontSize: 14,
+                                  ),
                                 ),
                               );
                             },
@@ -233,6 +302,7 @@ class _UserChatsState extends ConsumerState<UserChats> {
                           ),
                           onTap: () {
                             ref.invalidate(unreadCountProvider(contact.uid));
+                            ref.invalidate(lastMessageProvider(contact.uid));
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
                                 builder: (context) => CheckConnection(
@@ -251,27 +321,8 @@ class _UserChatsState extends ConsumerState<UserChats> {
                     color: AppColors.primaryBlue,
                   ),
                 ),
-                error: (err, stack) => Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'An error occurred while loading products',
-                        style: AppTextStyles.subtitle,
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryBlue,
-                          foregroundColor: AppColors.white,
-                        ),
-                        onPressed: () => ref.invalidate(userContactProvider),
-                        label: const Text("Retry"),
-                        icon: const Icon(Icons.refresh),
-                      ),
-                    ],
-                  ),
-                ),
+                error: (err, stack) =>
+                    AppErrorWidget(provider: userContactProvider),
               );
             },
           ),

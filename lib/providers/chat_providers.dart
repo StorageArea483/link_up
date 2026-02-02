@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:link_up/database/sqflite_helper.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/services/chat_service.dart';
 
@@ -26,7 +27,7 @@ final chatIdProvider = StateProvider<String?>((ref) => null);
 final lastSeenProvider = StateProvider<String>((ref) => '');
 
 // Unread count provider (Family: contactId)
-final unreadCountProvider = FutureProvider.autoDispose.family<int, String>((
+final unreadCountProvider = FutureProvider.family<int, String>((
   ref,
   contactId,
 ) async {
@@ -37,11 +38,11 @@ final unreadCountProvider = FutureProvider.autoDispose.family<int, String>((
   return ChatService.getUnreadCount(
     chatId: chatId,
     receiverId:
-        currentUserId, // Based on user's last edit: receiver is the contact
+        currentUserId, // Current user is the receiver for unread messages
   );
 });
 
-// Last message provider (Family: contactId)
+// Last message provider (Family: contactId) - Fetches from SQLite
 final lastMessageProvider = FutureProvider.family<String, String>((
   ref,
   contactId,
@@ -50,10 +51,13 @@ final lastMessageProvider = FutureProvider.family<String, String>((
   if (currentUserId == null) return '';
 
   final chatId = ChatService.generateChatId(currentUserId, contactId);
-  final docs = await ChatService.getLastMessage(chatId);
+  final sentMessage = await ChatService.getLastMessage(chatId);
+  final messages = await SqfliteHelper.getLastMessage(chatId);
 
-  if (docs.documents.isNotEmpty) {
-    return docs.documents.first.data['text'] ?? '';
+  if (sentMessage.documents.isNotEmpty) {
+    return sentMessage.documents.first.data['text'];
+  } else if (messages.isNotEmpty) {
+    return messages.first.text;
   }
   return '';
 });

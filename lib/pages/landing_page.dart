@@ -5,6 +5,7 @@ import 'package:link_up/providers/random_num_provider.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/add_new_contact/qr_code.dart';
 import 'package:link_up/widgets/add_new_contact/qr_scanner.dart';
+import 'package:link_up/widgets/app_error_widget.dart';
 import 'package:link_up/widgets/bottom_navbar.dart';
 import 'package:link_up/widgets/add_new_contact/phone_number.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -39,29 +40,8 @@ class LandingPage extends ConsumerWidget {
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.primaryBlue),
         ),
-        error: (error, stack) => Center(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  'An error occurred please retry',
-                  style: AppTextStyles.subtitle,
-                ),
-                const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryBlue,
-                    foregroundColor: AppColors.white,
-                  ),
-                  onPressed: () => ref.invalidate(userPhoneNumberProvider),
-                  label: const Text("Retry"),
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
-          ),
-        ),
+        error: (error, stack) =>
+            AppErrorWidget(provider: userPhoneNumberProvider),
         data: (randomNumber) => SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -289,30 +269,8 @@ class LandingPage extends ConsumerWidget {
                                       color: AppColors.primaryBlue,
                                     ),
                                   ),
-                                  error: (err, stack) => Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const Text(
-                                          'An un expected error occurred',
-                                          style: AppTextStyles.subtitle,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                AppColors.primaryBlue,
-                                            foregroundColor: AppColors.white,
-                                          ),
-                                          onPressed: () => ref.invalidate(
-                                            userContactProvider,
-                                          ),
-                                          label: const Text("Retry"),
-                                          icon: const Icon(Icons.refresh),
-                                        ),
-                                      ],
-                                    ),
+                                  error: (err, stack) => AppErrorWidget(
+                                    provider: userContactProvider,
                                   ),
                                 );
                           },

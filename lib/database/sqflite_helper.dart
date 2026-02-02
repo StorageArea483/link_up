@@ -78,6 +78,37 @@ class SqfliteHelper {
     }
   }
 
+  static Future<List<Message>> getLastMessage(String chatId) async {
+    final db = await database;
+
+    try {
+      final List<Map<String, dynamic>> maps = await db.query(
+        tableMessages,
+        where: '$columnChatId = ?',
+        whereArgs: [chatId],
+        orderBy: '$columnCreatedAt DESC',
+        limit: 1,
+      );
+
+      if (maps.isEmpty) return [];
+
+      return maps.map((map) {
+        return Message(
+          id: map[columnId],
+          chatId: map[columnChatId],
+          senderId: map[columnSenderId],
+          receiverId: map[columnReceiverId],
+          text: map[columnText],
+          status: map[columnStatus],
+          createdAt: DateTime.parse(map[columnCreatedAt]),
+        );
+      }).toList();
+    } catch (e) {
+      // Return empty list on error, don't throw
+      return [];
+    }
+  }
+
   static Future<List<Message>> getDeliveredMessages(String chatId) async {
     final db = await database;
 

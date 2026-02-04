@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:link_up/pages/google_signup.dart';
@@ -14,6 +15,7 @@ class CheckConnection extends StatefulWidget {
 
 class _CheckConnectionState extends State<CheckConnection>
     with WidgetsBindingObserver {
+  final _firestore = FirebaseFirestore.instance;
   @override
   void initState() {
     super.initState();

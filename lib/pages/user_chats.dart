@@ -61,6 +61,7 @@ class _UserChatsState extends ConsumerState<UserChats> {
                       .senderId; // If I received it, the contact is the sender
 
             // Invalidate providers for this contact to trigger UI refresh
+            if (!mounted) return;
             ref.invalidate(lastMessageProvider(contactId));
             ref.invalidate(unreadCountProvider(contactId));
           }
@@ -90,12 +91,13 @@ class _UserChatsState extends ConsumerState<UserChats> {
 
     // Pre-warm the providers for better performance
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUserId != null) {
+    if (currentUserId != null && mounted) {
       try {
         // This will trigger the providers to start loading data
         final contacts = await ref.read(userContactProvider.future);
         for (final contact in contacts) {
           // Pre-load last messages and unread counts for all contacts
+          if (!mounted) return;
           ref.read(lastMessageProvider(contact.uid));
           ref.read(unreadCountProvider(contact.uid));
         }
@@ -121,13 +123,15 @@ class _UserChatsState extends ConsumerState<UserChats> {
           }
 
           // Refresh all providers when coming back online
+          if (!mounted) return;
           ref.invalidate(userContactProvider);
 
           // Also refresh all contact providers to ensure fresh data
           final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-          if (currentUserId != null) {
+          if (currentUserId != null && mounted) {
             ref.read(userContactProvider.future).then((contacts) {
               for (final contact in contacts) {
+                if (!mounted) return;
                 ref.invalidate(lastMessageProvider(contact.uid));
                 ref.invalidate(unreadCountProvider(contact.uid));
               }

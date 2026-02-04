@@ -373,6 +373,7 @@ class LandingPage extends ConsumerWidget {
                 builder: (context, ref, _) {
                   return ElevatedButton(
                     onPressed: () async {
+                      if (!context.mounted) return;
                       ref.read(isLoadingProvider.notifier).state = true;
                       final newName = nameController.text.trim();
                       if (newName.isEmpty) return;
@@ -387,7 +388,9 @@ class LandingPage extends ConsumerWidget {
                             ),
                           );
                         }
-                        ref.read(isLoadingProvider.notifier).state = false;
+                        if (context.mounted) {
+                          ref.read(isLoadingProvider.notifier).state = false;
+                        }
                         return;
                       }
 

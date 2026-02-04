@@ -127,7 +127,8 @@ class ChatService {
 
   static subscribeToRealtimeMessages(Function(RealtimeMessage) callback) {
     try {
-      // we will have to subscribe to all documents messages that comes in the collection
+      // Subscribe to all document changes in the messages collection
+      // Only listen for 'sent' status messages (delivered messages are handled locally)
       return realtime
           .subscribe([
             'databases.$databaseId.collections.$messagesCollectionId.documents',
@@ -136,6 +137,8 @@ class ChatService {
           .listen(
             (response) {
               try {
+                // Only process messages with 'sent' status
+                // Delivered messages are deleted from Appwrite and stored locally
                 if (response.payload['status'] == 'sent') {
                   callback(response);
                 }
@@ -337,6 +340,9 @@ class ChatService {
           Query.equal('status', 'sent'),
         ],
       );
+      if (result.documents.isEmpty) {
+        return 0;
+      }
       return result.total;
     } catch (e) {
       return 0;

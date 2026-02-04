@@ -53,12 +53,14 @@ class _UserChatsState extends ConsumerState<UserChats> {
           // (either sent by them or sent to them)
           if (newMessage.senderId == currentUserId ||
               newMessage.receiverId == currentUserId) {
-            // Determine which contact's providers need to be updated
+            // Determine the contact (the OTHER person in this conversation)
             final contactId = newMessage.senderId == currentUserId
-                ? newMessage.receiverId
-                : newMessage.senderId;
+                ? newMessage
+                      .receiverId // If I sent it, the contact is the receiver
+                : newMessage
+                      .senderId; // If I received it, the contact is the sender
 
-            // Invalidate the providers to trigger a refresh
+            // Invalidate providers for this contact to trigger UI refresh
             ref.invalidate(lastMessageProvider(contactId));
             ref.invalidate(unreadCountProvider(contactId));
           }
@@ -105,21 +107,36 @@ class _UserChatsState extends ConsumerState<UserChats> {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to network connectivity changes in build method
-    ref.listen(networkConnectivityProvider, (previous, next) {
-      next.when(
-        data: (isOnline) {
-          if (isOnline) {
-            messageSubscription?.resume();
-            // Refresh all providers when coming back online
-            ref.invalidate(userContactProvider);
-          } else {
-            messageSubscription?.pause();
+    // Listen to network connectivity changes - this is the correct place for ref.listen
+    ref.listen<AsyncValue<bool>>(networkConnectivityProvider, (previous, next) {
+      if (!mounted) return;
+
+      next.whenData((isOnline) {
+        if (isOnline) {
+          messageSubscription?.resume();
+
+          // If subscriptions were null or failed, recreate them
+          if (messageSubscription == null) {
+            _subscribeToMessages();
           }
-        },
-        loading: () {},
-        error: (_, __) {},
-      );
+
+          // Refresh all providers when coming back online
+          ref.invalidate(userContactProvider);
+
+          // Also refresh all contact providers to ensure fresh data
+          final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+          if (currentUserId != null) {
+            ref.read(userContactProvider.future).then((contacts) {
+              for (final contact in contacts) {
+                ref.invalidate(lastMessageProvider(contact.uid));
+                ref.invalidate(unreadCountProvider(contact.uid));
+              }
+            });
+          }
+        } else {
+          messageSubscription?.pause();
+        }
+      });
     });
 
     return PopScope(
@@ -301,15 +318,15 @@ class _UserChatsState extends ConsumerState<UserChats> {
                             color: AppColors.textSecondary,
                           ),
                           onTap: () {
-                            ref.invalidate(unreadCountProvider(contact.uid));
-                            ref.invalidate(lastMessageProvider(contact.uid));
-                            Navigator.of(context).pushReplacement(
-                              MaterialPageRoute(
-                                builder: (context) => CheckConnection(
-                                  child: ChatScreen(contact: contact),
+                            if (mounted) {
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (context) => CheckConnection(
+                                    child: ChatScreen(contact: contact),
+                                  ),
                                 ),
-                              ),
-                            );
+                              );
+                            }
                           },
                         ),
                       );

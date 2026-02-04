@@ -11,6 +11,7 @@ import 'package:link_up/styles/styles.dart';
 import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'package:link_up/database/sqflite_helper.dart';
+import 'package:link_up/widgets/sqflite_msgs_clear.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final UserContacts contact;
@@ -85,18 +86,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _initializeChat() async {
+    if (!mounted) return;
+
     final userId = FirebaseAuth.instance.currentUser?.uid;
     _currentUserId = userId;
+
+    if (!mounted) return;
     ref.read(currentUserIdProvider.notifier).state =
         userId; // this provider indicates the current user using the app
 
     if (userId == null) {
-      ref.read(isLoadingStateProvider.notifier).state = false;
+      if (mounted) {
+        ref.read(isLoadingStateProvider.notifier).state = false;
+      }
       return;
     }
 
     final chatId = ChatService.generateChatId(userId, widget.contact.uid);
     _chatId = chatId;
+
+    if (!mounted) return;
     ref.read(chatIdProvider.notifier).state =
         chatId; // the current chat id between authenticated users
 
@@ -106,7 +115,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       online: true,
     ); // updating the current users presence to online and firing the _subscribeToPresence method
 
+    // IMPORTANT: Load messages first to ensure UI displays them
     await _loadMessages();
+
+    // Set up subscriptions
     _subscribeToMessages();
     _subscribeToTyping();
     _subscribeToPresence();
@@ -114,50 +126,86 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Check contact's presence after setting up subscriptions
     await _checkUserPresence();
 
+    // IMPORTANT: Add a small delay to ensure UI has rendered the messages
+    // before marking them as delivered
+    await Future.delayed(const Duration(milliseconds: 500));
+
     // Mark messages as delivered when user comes online and update UI
     await _markMessagesAsDeliveredAndUpdate(userId);
 
-    ref.read(isLoadingStateProvider.notifier).state = false;
+    // Only update loading state if widget is still mounted
+    if (mounted) {
+      ref.read(isLoadingStateProvider.notifier).state = false;
+    }
   }
 
   Future<void> _markMessagesAsDeliveredAndUpdate(String userId) async {
-    // update the message status because reciever has come online
-    if (_chatId == null) return;
+    // update the message status because receiver has come online
+    if (_chatId == null || !mounted) return;
+
+    print(
+      '🔄 Marking messages as delivered for user: $userId in chat: $_chatId',
+    );
 
     try {
       final updatedMessages = await ChatService.markMessagesAsDelivered(
         chatId: _chatId!,
-        receiverId: userId, // recieve messages ment for this user
+        receiverId: userId, // receive messages meant for this user
       );
 
+      print('✅ Marked ${updatedMessages.length} messages as delivered');
+
       if (updatedMessages.isNotEmpty && mounted) {
+        // Get current messages from the UI
         final currentMessages = ref.read(messagesProvider);
         final updatedMessagesList = [...currentMessages];
 
+        // Process each updated message
         for (final updatedMessage in updatedMessages) {
           final updatedMsg = Message.fromJson(updatedMessage.data);
+
+          // Find and update the message in the current list
           final index = updatedMessagesList.indexWhere(
             (msg) => msg.id == updatedMsg.id,
           );
+
           if (index != -1) {
+            // Update existing message
             updatedMessagesList[index] = updatedMsg;
+            print(
+              '🔄 Updated message ${updatedMsg.id} status to ${updatedMsg.status}',
+            );
           } else {
-            // If message not found in current list, add it
+            // If message not found in current list, add it at the beginning
             updatedMessagesList.insert(0, updatedMsg);
+            print('➕ Added new delivered message ${updatedMsg.id}');
           }
 
+          // Save to SQLite and delete from Appwrite
           final savedSuccessfully = await SqfliteHelper.insertDeliveredMessage(
             updatedMsg,
           );
 
-          if (savedSuccessfully) {
+          if (savedSuccessfully && mounted) {
+            ref.invalidate(unreadCountProvider(widget.contact.uid));
+            ref.invalidate(lastMessageProvider(widget.contact.uid));
             await ChatService.deleteMessageFromAppwrite(updatedMsg.id);
+            print(
+              '💾 Saved message ${updatedMsg.id} to SQLite and deleted from Appwrite',
+            );
           }
         }
 
         // Sort by creation time (newest first) to maintain order
         updatedMessagesList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        // Update the UI with the new message list
+        if (!mounted) return;
         ref.read(messagesProvider.notifier).state = updatedMessagesList;
+
+        print(
+          '🔄 UI updated with ${updatedMessagesList.length} total messages',
+        );
       } else if (mounted) {
         // No new delivered messages, but ensure we have offline messages loaded
         final currentMessages = ref.read(messagesProvider);
@@ -165,10 +213,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           final offlineMessages = await SqfliteHelper.getDeliveredMessages(
             _chatId!,
           );
+          if (!mounted) return;
           ref.read(messagesProvider.notifier).state = offlineMessages;
+          print(
+            '📱 Loaded ${offlineMessages.length} offline messages as fallback',
+          );
         }
       }
     } catch (e) {
+      print('❌ Error marking messages as delivered: $e');
       // On error, ensure we still have offline messages if current list is empty
       if (mounted) {
         final currentMessages = ref.read(messagesProvider);
@@ -176,6 +229,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           final offlineMessages = await SqfliteHelper.getDeliveredMessages(
             _chatId!,
           );
+          if (!mounted) return;
           ref.read(messagesProvider.notifier).state = offlineMessages;
         }
       }
@@ -183,14 +237,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<bool> _loadMessages() async {
+    if (!mounted) return false;
+
     try {
       final chatId = ref.read(
         chatIdProvider,
       ); // indicating current chat between users
       if (chatId == null) return false;
 
+      print('🔄 Loading messages for chat: $chatId');
+
       // Always try to load from SQLite first to get delivered messages
       final offlineMessages = await SqfliteHelper.getDeliveredMessages(chatId);
+      print('📱 Loaded ${offlineMessages.length} offline messages from SQLite');
 
       // Try to load from Appwrite for sent status messages
       final docs = await ChatService.getMessages(chatId);
@@ -199,18 +258,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             .map((doc) => Message.fromJson(doc.data))
             .toList(); // sent status messages list
 
+        print('☁️ Loaded ${sentMessages.length} sent messages from Appwrite');
+
         // Merge offline and online messages using helper method
         final allMessages = _mergeMessages(sentMessages, offlineMessages);
+        print('🔀 Merged total: ${allMessages.length} messages');
+
+        if (!mounted) return false;
+
+        // Update the provider with all messages
         ref.read(messagesProvider.notifier).state = allMessages;
+
+        // Force a rebuild to ensure UI updates immediately
+        if (mounted) {
+          setState(() {});
+        }
       }
     } catch (e) {
+      print('❌ Error loading messages: $e');
       // On error, load from SQLite only
+      if (!mounted) return false;
       final chatId = ref.read(chatIdProvider);
       if (chatId != null && mounted) {
         final offlineMessages = await SqfliteHelper.getDeliveredMessages(
           chatId,
         );
+        if (!mounted) return false;
         ref.read(messagesProvider.notifier).state = offlineMessages;
+
+        // Force a rebuild
+        if (mounted) {
+          setState(() {});
+        }
       }
       return false;
     }
@@ -218,6 +297,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _subscribeToMessages() {
+    if (!mounted) return;
+
     final chatId = ref.read(
       chatIdProvider,
     ); // current chat id between the two users
@@ -230,6 +311,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           final newMessage = Message.fromJson(
             response.payload,
           ); // sent status message
+
+          if (!mounted) return;
           final currentMessages = ref.read(messagesProvider);
 
           // Check if this is an update to an existing message or a new message
@@ -241,16 +324,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (existingIndex != -1) {
             final updatedMessages = [...currentMessages];
             updatedMessages[existingIndex] = newMessage;
+            if (!mounted) return;
             ref.read(messagesProvider.notifier).state = updatedMessages;
 
             if (newMessage.status == 'delivered') {
               _handleDeliveredMessage(newMessage);
             }
           } else {
+            // New message received
+            if (!mounted) return;
             ref.read(messagesProvider.notifier).state = [
               newMessage,
               ...currentMessages,
             ]; // if sent status message simply add it in the UI
+
+            // IMPORTANT: Auto-mark as delivered if receiver is online and in chat
+            if (newMessage.status == 'sent' &&
+                newMessage.receiverId == _currentUserId &&
+                mounted) {
+              // Mark this specific message as delivered
+              _markSingleMessageAsDelivered(newMessage.id);
+            }
+
             if (newMessage.status == 'delivered') {
               _handleDeliveredMessage(newMessage);
             }
@@ -270,7 +365,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  // Mark a single specific message as delivered (for real-time auto-delivery)
+  Future<void> _markSingleMessageAsDelivered(String messageId) async {
+    if (_chatId == null || _currentUserId == null || !mounted) return;
+
+    try {
+      // Update the specific message status to 'delivered'
+      final updatedMessage = await ChatService.updateMessageStatus(
+        messageId,
+        'delivered',
+      );
+
+      if (updatedMessage != null && mounted) {
+        // Update the UI immediately
+        final currentMessages = ref.read(messagesProvider);
+        final updatedMessagesList = [...currentMessages];
+
+        final updatedMsg = Message.fromJson(updatedMessage.data);
+        final index = updatedMessagesList.indexWhere(
+          (msg) => msg.id == updatedMsg.id,
+        );
+
+        if (index != -1) {
+          updatedMessagesList[index] = updatedMsg;
+          if (!mounted) return;
+          ref.read(messagesProvider.notifier).state = updatedMessagesList;
+
+          // Handle the delivered message (save to SQLite and delete from Appwrite)
+          await _handleDeliveredMessage(updatedMsg);
+        }
+      }
+    } catch (e) {}
+  }
+
   void _subscribeToTyping() {
+    if (!mounted) return;
+
     final chatId = ref.read(chatIdProvider);
     final currentUserId = ref.read(currentUserIdProvider);
     if (chatId == null) return;
@@ -280,6 +410,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         if (!mounted) return;
         try {
           if (response.payload['userId'] != currentUserId) {
+            if (!mounted) return;
             ref.read(isTypingProvider.notifier).state =
                 response.payload['isTyping'] ?? false;
           }
@@ -289,6 +420,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _subscribeToPresence() {
+    if (!mounted) return;
+
     try {
       presenceSubscription = ChatService.subscribeToPresence(widget.contact.uid, (
         response,
@@ -302,9 +435,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
           // IMPORTANT: Read the OLD status BEFORE updating it
           // This allows us to detect the transition from offline → online
+          if (!mounted) return;
           final wasOnlineBefore = ref.read(isOnlineProvider);
 
           // Now update the provider with the NEW status
+          if (!mounted) return;
           ref.read(isOnlineProvider.notifier).state =
               isOnline; // provider for updating the reciever online/offline status
 
@@ -314,15 +449,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               lastSeenStr.toString().isNotEmpty) {
             try {
               final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
+              if (!mounted) return;
               ref.read(lastSeenProvider.notifier).state =
                   'Last seen ${_formatTime(lastSeenTime)}';
             } catch (e) {
               // Fallback if date parsing fails
+              if (!mounted) return;
               ref.read(lastSeenProvider.notifier).state = 'Offline';
             }
           } else if (!isOnline) {
+            if (!mounted) return;
             ref.read(lastSeenProvider.notifier).state = 'Offline';
           } else {
+            if (!mounted) return;
             ref.read(lastSeenProvider.notifier).state = '';
           }
 
@@ -376,6 +515,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _sendMessage() async {
+    if (!mounted) return;
+
     final currentUserId = ref.read(currentUserIdProvider);
     final chatId = ref.read(chatIdProvider);
     final networkOnlineAsync = ref.read(networkConnectivityProvider);
@@ -389,12 +530,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Check internet connectivity first
     if (!hasInternet) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Message failed to send - No internet connection'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message failed to send - No internet connection'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
@@ -415,10 +558,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           messageDoc.data,
         ); // message with status sent gets added in appwrite db
         final currentMessages = ref.read(messagesProvider);
+        if (!mounted) return;
         ref.read(messagesProvider.notifier).state = [
           newMessage,
           ...currentMessages,
         ];
+        // Import the providers and invalidate them for this contact
+        // This ensures the sender's chat list updates immediately
+
+        try {
+          if (!mounted) return;
+          ref.invalidate(lastMessageProvider(widget.contact.uid));
+        } catch (e) {}
       }
 
       await ChatService.setTyping(
@@ -430,6 +581,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _onTypingChanged(String text) {
+    if (!mounted) return;
+
     final currentUserId = ref.read(currentUserIdProvider);
     final chatId = ref.read(chatIdProvider);
 
@@ -452,14 +605,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to connectivity changes and pause/resume subscriptions
-    final isOnlineAsync = ref.watch(networkConnectivityProvider);
+    // Listen to network connectivity changes - this is the correct place for ref.listen
+    // registers only one listener and replaces the current listener with new one with rebuilds
+    ref.listen<AsyncValue<bool>>(networkConnectivityProvider, (previous, next) {
+      if (!mounted) return;
 
-    isOnlineAsync.whenData((isOnline) {
-      if (isOnline != _wasOnline) {
-        _wasOnline = isOnline;
-        _handleConnectivityChange(isOnline);
-      }
+      next.whenData((isOnline) {
+        if (isOnline != _wasOnline) {
+          _wasOnline = isOnline;
+          _handleConnectivityChange(isOnline);
+        }
+      });
     });
 
     return PopScope(
@@ -488,7 +644,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _handleConnectivityChange(bool isOnline) {
-    if (_currentUserId == null) return;
+    if (_currentUserId == null || !mounted) return;
 
     if (isOnline) {
       // Try to resume subscriptions first
@@ -514,6 +670,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
 
       // Only reload messages if we don't have any messages currently
+      if (!mounted) return;
       final currentMessages = ref.read(messagesProvider);
       if (currentMessages.isEmpty) {
         _reloadMessagesAfterReconnection();
@@ -525,17 +682,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       typingSubscription?.pause();
       presenceSubscription?.pause();
 
-      ref.read(isOnlineProvider.notifier).state =
-          false; // update the reciever online status to offline
+      if (mounted) {
+        ref.read(isOnlineProvider.notifier).state =
+            false; // update the reciever online status to offline
+      }
     }
   }
 
   Future<void> _reloadMessagesAfterReconnection() async {
+    if (!mounted) return;
+
     try {
       final chatId = ref.read(chatIdProvider);
       if (chatId == null) return;
 
       // Get current messages to preserve them
+      if (!mounted) return;
       final currentMessages = ref.read(messagesProvider);
 
       // Step 1: Fetch latest messages from Appwrite
@@ -564,14 +726,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             }
           }
 
-          ref.read(messagesProvider.notifier).state = mergedMessages;
+          if (mounted) {
+            ref.read(messagesProvider.notifier).state = mergedMessages;
+          }
         } else {
           // No new messages from Appwrite, but don't clear existing messages
           // Only load from SQLite if we have no messages at all
-          if (currentMessages.isEmpty) {
+          if (currentMessages.isEmpty && mounted) {
             final offlineMessages = await SqfliteHelper.getDeliveredMessages(
               chatId,
             );
+            if (!mounted) return;
             ref.read(messagesProvider.notifier).state = offlineMessages;
           }
           // If we have existing messages, keep them as they are
@@ -580,6 +745,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } catch (e) {
       // On error, don't clear existing messages
       // Only load from SQLite if we have no messages at all
+      if (!mounted) return;
       final chatId = ref.read(chatIdProvider);
       final currentMessages = ref.read(messagesProvider);
 
@@ -587,6 +753,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final offlineMessages = await SqfliteHelper.getDeliveredMessages(
           chatId,
         );
+        if (!mounted) return;
         ref.read(messagesProvider.notifier).state = offlineMessages;
       }
     }
@@ -700,7 +867,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
               IconButton(
                 icon: const Icon(Icons.more_vert, color: AppColors.textPrimary),
-                onPressed: () {},
+                onPressed: () {
+                  final msgsClear = SqfliteMsgsClear(
+                    chatId: _chatId,
+                    contactUid: widget.contact.uid,
+                    ref: ref,
+                    context: context,
+                  );
+                  msgsClear.showChatOptionsMenu();
+                },
               ),
             ],
           ),

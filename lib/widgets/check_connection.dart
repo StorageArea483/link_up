@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:link_up/pages/google_signup.dart';
@@ -15,7 +14,6 @@ class CheckConnection extends StatefulWidget {
 
 class _CheckConnectionState extends State<CheckConnection>
     with WidgetsBindingObserver {
-  final _firestore = FirebaseFirestore.instance;
   @override
   void initState() {
     super.initState();
@@ -36,16 +34,8 @@ class _CheckConnectionState extends State<CheckConnection>
 
     if (state == AppLifecycleState.resumed) {
       ChatService.updatePresence(userId: user.uid, online: true);
-    } else if (state == AppLifecycleState.paused) {
-      // Use paused for backgrounding to ensure reliable 'last seen' set
+    } else {
       ChatService.updatePresence(userId: user.uid, online: false);
-    } else if (state == AppLifecycleState.detached) {
-      debugPrint("App closed successfully");
-      ChatService.updatePresence(
-        userId: user.uid,
-        online: false,
-        clearLastSeen: true,
-      );
     }
   }
 

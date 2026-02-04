@@ -23,9 +23,6 @@ final currentUserIdProvider = StateProvider<String?>((ref) => null);
 // Chat ID provider
 final chatIdProvider = StateProvider<String?>((ref) => null);
 
-// Last seen provider
-final lastSeenProvider = StateProvider<String>((ref) => '');
-
 // Unread count provider (Family: contactId)
 final unreadCountProvider = FutureProvider.family<int, String>((
   ref,

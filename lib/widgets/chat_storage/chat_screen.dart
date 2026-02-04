@@ -392,8 +392,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         try {
           final isOnline =
               response.payload['online'] ??
-              false; // checking the reciever status
-          final lastSeenStr = response.payload['lastSeen'];
+              false; // checking the receiver status
 
           // IMPORTANT: Read the OLD status BEFORE updating it
           // This allows us to detect the transition from offline → online
@@ -403,29 +402,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           // Now update the provider with the NEW status
           if (!mounted) return;
           ref.read(isOnlineProvider.notifier).state =
-              isOnline; // provider for updating the reciever online/offline status
-
-          // Update Last Seen Provider with robust parsing
-          if (!isOnline &&
-              lastSeenStr != null &&
-              lastSeenStr.toString().isNotEmpty) {
-            try {
-              final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
-              if (!mounted) return;
-              ref.read(lastSeenProvider.notifier).state =
-                  'Last seen ${_formatTime(lastSeenTime)}';
-            } catch (e) {
-              // Fallback if date parsing fails
-              if (!mounted) return;
-              ref.read(lastSeenProvider.notifier).state = 'Offline';
-            }
-          } else if (!isOnline) {
-            if (!mounted) return;
-            ref.read(lastSeenProvider.notifier).state = 'Offline';
-          } else {
-            if (!mounted) return;
-            ref.read(lastSeenProvider.notifier).state = '';
-          }
+              isOnline; // provider for updating the receiver online/offline status
 
           // Detect transition: Contact just came online (was offline, now online)
           // This is when we mark messages as delivered
@@ -444,34 +421,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _checkUserPresence() async {
     try {
       final presence = await ChatService.getUserPresence(widget.contact.uid);
-      // checking the presence of the reciever
+      // checking the presence of the receiver
       if (mounted) {
         // If no presence record exists, assume user is offline
         final isOnline = presence?.data['online'] ?? false;
-        final lastSeenStr = presence?.data['lastSeen'];
 
         ref.read(isOnlineProvider.notifier).state =
-            isOnline; // provider for updating the online\offline\lastSeen status of the other user
-
-        if (!isOnline &&
-            lastSeenStr != null &&
-            lastSeenStr.toString().isNotEmpty) {
-          try {
-            final lastSeenTime = DateTime.parse(lastSeenStr).toLocal();
-            ref.read(lastSeenProvider.notifier).state =
-                'Last seen ${_formatTime(lastSeenTime)}';
-          } catch (e) {
-            ref.read(lastSeenProvider.notifier).state = 'Offline';
-          }
-        } else if (!isOnline) {
-          ref.read(lastSeenProvider.notifier).state = 'Offline';
-        }
+            isOnline; // provider for updating the online/offline status of the other user
       }
     } catch (e) {
       // On error, assume user is offline
       if (mounted) {
         ref.read(isOnlineProvider.notifier).state = false;
-        ref.read(lastSeenProvider.notifier).state = 'Offline';
       }
     }
   }
@@ -646,7 +607,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       if (mounted) {
         ref.read(isOnlineProvider.notifier).state =
-            false; // update the reciever online status to offline
+            false; // update the receiver online status to offline
       }
     }
   }
@@ -802,16 +763,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         final isTyping = ref.watch(isTypingProvider);
                         final isContactOnline = ref.watch(isOnlineProvider);
 
-                        // FIXED: Only show receiver's actual presence status
-                        // Sender's network status does not affect receiver's status
+                        // Show only online/offline status or typing indicator
                         return Text(
                           isTyping
                               ? 'typing...'
                               : isContactOnline
                               ? 'Online'
-                              : ref.watch(lastSeenProvider).isEmpty
-                              ? 'Offline'
-                              : ref.watch(lastSeenProvider),
+                              : 'Offline',
                           style: TextStyle(
                             color: isTyping
                                 ? AppColors.primaryBlue

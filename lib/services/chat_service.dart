@@ -277,7 +277,6 @@ class ChatService {
   static Future<bool> updatePresence({
     required String userId, // current persons using the app userId
     required bool online, // true if online false if offline
-    bool clearLastSeen = false,
   }) async {
     try {
       final existingDocs = await databases.listDocuments(
@@ -288,23 +287,19 @@ class ChatService {
         ], // checking is user exists or not
       );
 
-      final lastSeenVal = clearLastSeen
-          ? null
-          : DateTime.now().toIso8601String(); // setting last seen time
-
       if (existingDocs.documents.isEmpty) {
         await databases.createDocument(
           databaseId: databaseId,
           collectionId: presenceCollectionId,
           documentId: ID.unique(),
-          data: {'userId': userId, 'online': online, 'lastSeen': lastSeenVal},
+          data: {'userId': userId, 'online': online},
         ); // a new doc will get created with the respected status
       } else {
         await databases.updateDocument(
           databaseId: databaseId,
           collectionId: presenceCollectionId,
           documentId: existingDocs.documents.first.$id,
-          data: {'online': online, 'lastSeen': lastSeenVal},
+          data: {'online': online},
         );
       }
       return true;

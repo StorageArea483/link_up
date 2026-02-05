@@ -10,3 +10,5 @@ final Account account = Account(client);
 final Databases databases = Databases(client);
 final Storage storage = Storage(client);
 final Realtime realtime = Realtime(client);
+
+final String bucketId = '69842ca90032baa373b8';

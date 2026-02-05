@@ -18,20 +18,27 @@ class ChatService {
     required String senderId,
     required String receiverId,
     required String text,
+    String? imageId,
   }) async {
     try {
+      final Map<String, dynamic> data = {
+        'chatId': chatId,
+        'senderId': senderId,
+        'receiverId': receiverId,
+        'text': text,
+        'status': 'sent',
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+
+      if (imageId != null) {
+        data['imageId'] = imageId;
+      }
+
       return await databases.createDocument(
         databaseId: databaseId,
         collectionId: messagesCollectionId,
         documentId: ID.unique(),
-        data: {
-          'chatId': chatId,
-          'senderId': senderId,
-          'receiverId': receiverId,
-          'text': text,
-          'status': 'sent',
-          'createdAt': DateTime.now().toIso8601String(),
-        },
+        data: data,
       );
     } catch (e) {
       return null;

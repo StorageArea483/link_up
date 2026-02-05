@@ -4,6 +4,7 @@ class Message {
   final String senderId;
   final String receiverId;
   final String text;
+  final String? imageId;
   final String status;
   final DateTime createdAt;
 
@@ -13,6 +14,7 @@ class Message {
     required this.senderId,
     required this.receiverId,
     required this.text,
+    this.imageId,
     required this.status,
     required this.createdAt,
   });
@@ -24,6 +26,7 @@ class Message {
       senderId: json['senderId'] ?? '',
       receiverId: json['receiverId'] ?? '',
       text: json['text'] ?? '',
+      imageId: json['imageId'],
       status: json['status'] ?? 'sent',
       createdAt: DateTime.parse(json['createdAt']),
     );

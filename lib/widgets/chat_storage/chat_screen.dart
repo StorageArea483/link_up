@@ -1,6 +1,10 @@
+import 'package:appwrite/appwrite.dart';
+import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:link_up/config/appwrite_client.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/models/user_contacts.dart';
 import 'package:link_up/pages/landing_page.dart';
@@ -893,13 +897,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              message.text,
-              style: TextStyle(
-                color: isSentByMe ? Colors.white : AppColors.textPrimary,
-                fontSize: 14,
+            if (message.imageId != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: MessageImageBubble(fileId: message.imageId!),
               ),
-            ),
+            if (message.text.isNotEmpty &&
+                (message.imageId == null || message.text != '📷 Image'))
+              Text(
+                message.text,
+                style: TextStyle(
+                  color: isSentByMe ? Colors.white : AppColors.textPrimary,
+                  fontSize: 14,
+                ),
+              ),
             const SizedBox(height: 4),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -947,14 +958,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               color: AppColors.primaryBlue,
               size: 28,
             ),
-            onPressed: () {},
+            onPressed: () async {
+              final imagePicker = await _pickImage(ImageSource.gallery);
+              if (!imagePicker && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Failed to upload image'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
           ),
           IconButton(
             icon: const Icon(
               Icons.camera_alt_outlined,
               color: AppColors.textSecondary,
             ),
-            onPressed: () {},
+            onPressed: () async {
+              final imagePicker = await _pickImage(ImageSource.camera);
+              if (!imagePicker && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Failed to upload image'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
           ),
           Expanded(
             child: Container(
@@ -1011,6 +1042,101 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  Future<bool> _pickImage(ImageSource source) async {
+    final image = await ImagePicker().pickImage(source: source);
+    if (image == null) return false;
+
+    final currentUserId = ref.read(currentUserIdProvider);
+    final chatId = ref.read(chatIdProvider);
+
+    if (currentUserId == null || chatId == null || !mounted) return false;
+
+    // Check internet connection
+    final networkOnlineAsync = ref.read(networkConnectivityProvider);
+    final hasInternet = networkOnlineAsync.value ?? true;
+    if (!hasInternet) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No internet connection'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return false;
+    }
+
+    try {
+      // Show uploading indicator if needed, but for now we proceed
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(
+            backgroundColor: AppColors.primaryBlue,
+          ),
+        ),
+      );
+      final file = await storage.createFile(
+        bucketId: bucketId,
+        fileId: ID.unique(),
+        file: InputFile.fromPath(path: image.path),
+      );
+
+      // Send message with imageId
+      final messageDoc = await ChatService.sendMessage(
+        chatId: chatId,
+        senderId: currentUserId,
+        receiverId: widget.contact.uid,
+        text: 'Image',
+        imageId: file.$id,
+      );
+
+      if (messageDoc != null && mounted) {
+        final newMessage = Message.fromJson(messageDoc.data);
+        final currentMessages = ref.read(messagesProvider);
+
+        if (!mounted) return true;
+        if (mounted) {
+          ref.read(messagesProvider.notifier).state = [
+            newMessage,
+            ...currentMessages,
+          ];
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image uploaded successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+
+        try {
+          if (mounted) ref.invalidate(lastMessageProvider(widget.contact.uid));
+        } catch (e) {}
+      } else {
+        // If message creation failed (messageDoc is null), we must still pop the dialog!
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to send image message'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+
+      return true;
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+      }
+      debugPrint('Error uploading image: $e');
+      return false;
+    }
+  }
+
   // Format timestamp
   String _formatTime(DateTime dateTime) {
     final now = DateTime.now();
@@ -1023,5 +1149,52 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
+  }
+}
+
+class MessageImageBubble extends ConsumerWidget {
+  final String fileId;
+
+  const MessageImageBubble({super.key, required this.fileId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final imageAsync = ref.watch(imagePreviewProvider(fileId));
+
+    return imageAsync.when(
+      data: (data) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            Uint8List.fromList(data),
+            width: 250,
+            fit: BoxFit.cover,
+          ),
+        );
+      },
+      loading: () => Container(
+        width: 250,
+        height: 150,
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppColors.primaryBlue,
+          ),
+        ),
+      ),
+      error: (error, stack) => Container(
+        width: 250,
+        height: 150,
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Center(child: Icon(Icons.error, color: Colors.grey)),
+      ),
+    );
   }
 }

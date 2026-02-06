@@ -58,6 +58,7 @@ class _GoogleAuthenticationState extends ConsumerState<GoogleAuthentication> {
   }
 
   Future<void> _handleGoogleSignIn() async {
+    if (!mounted) return;
     // Set loading to true using local state
     ref.read(isLoadingProvider.notifier).state = true;
 
@@ -67,11 +68,13 @@ class _GoogleAuthenticationState extends ConsumerState<GoogleAuthentication> {
       if (!mounted) return;
 
       if (userCredential != null) {
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const LandingPage()),
         );
       } else {
         // User cancelled sign-in
+        if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
       }
     } catch (e) {
@@ -79,6 +82,7 @@ class _GoogleAuthenticationState extends ConsumerState<GoogleAuthentication> {
 
       ref.read(isLoadingProvider.notifier).state = false;
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Request not completed: $e'),

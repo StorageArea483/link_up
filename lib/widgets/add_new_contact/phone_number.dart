@@ -27,12 +27,16 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
 
   Future<void> _submit() async {
     if (_formKey.currentState!.validate()) {
+      if (!mounted) return;
       ref.read(isLoadingProvider.notifier).state = true;
       final phoneNumber = _numberController.text;
       final contactName = _nameController.text;
       final currentUser = FirebaseAuth.instance.currentUser;
 
       if (currentUser == null) {
+        if (!mounted) return;
+        ref.read(isLoadingProvider.notifier).state = false;
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -41,7 +45,6 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
             ),
           ),
         );
-        ref.read(isLoadingProvider.notifier).state = false;
         return;
       }
 
@@ -52,6 +55,8 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
             .where('user phone number', isEqualTo: phoneNumber)
             .get();
 
+        if (!mounted) return;
+
         if (querySnapshot.docs.isNotEmpty) {
           final foundUserDoc = querySnapshot.docs.first;
           final foundUserId = foundUserDoc.id;
@@ -60,13 +65,14 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
           // Check if trying to add yourself
           if (foundUserId == currentUser.uid) {
             if (!mounted) return;
+            ref.read(isLoadingProvider.notifier).state = false;
+            if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('You cannot add yourself as a contact'),
                 backgroundColor: Colors.orange,
               ),
             );
-            ref.read(isLoadingProvider.notifier).state = false;
             return;
           }
 
@@ -78,7 +84,11 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
               .doc(foundUserId)
               .get();
 
+          if (!mounted) return;
+
           if (existingContact.exists) {
+            if (!mounted) return;
+            ref.read(isLoadingProvider.notifier).state = false;
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -86,7 +96,6 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
                 backgroundColor: Colors.orange,
               ),
             );
-            ref.read(isLoadingProvider.notifier).state = false;
             return;
           }
 
@@ -109,6 +118,8 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
               .doc(currentUser.uid)
               .get();
 
+          if (!mounted) return;
+
           final currentUserData = currentUserDoc.data()!;
 
           await FirebaseFirestore.instance
@@ -124,22 +135,26 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
               });
 
           if (!mounted) return;
+          ref.read(isLoadingProvider.notifier).state = false;
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Contact Added Successfully'),
               backgroundColor: Colors.green,
             ),
           );
-          ref.read(isLoadingProvider.notifier).state = false;
 
           // Clear fields and go back
           _numberController.clear();
           _nameController.clear();
+          if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => const LandingPage()),
           );
         } else {
           // User does not exist
+          if (!mounted) return;
+          ref.read(isLoadingProvider.notifier).state = false;
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -149,6 +164,8 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
           );
         }
       } catch (e) {
+        if (!mounted) return;
+        ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

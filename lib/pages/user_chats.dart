@@ -80,6 +80,7 @@ class _UserChatsState extends ConsumerState<UserChats> {
     // Check initial network connectivity
     try {
       final isOnline = await ref.read(networkConnectivityProvider.future);
+      if (!mounted) return;
       if (!isOnline) {
         messageSubscription?.pause();
       } else {
@@ -95,6 +96,7 @@ class _UserChatsState extends ConsumerState<UserChats> {
       try {
         // This will trigger the providers to start loading data
         final contacts = await ref.read(userContactProvider.future);
+        if (!mounted) return;
         for (final contact in contacts) {
           // Pre-load last messages and unread counts for all contacts
           if (!mounted) return;
@@ -322,15 +324,14 @@ class _UserChatsState extends ConsumerState<UserChats> {
                             color: AppColors.textSecondary,
                           ),
                           onTap: () {
-                            if (mounted) {
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                  builder: (context) => CheckConnection(
-                                    child: ChatScreen(contact: contact),
-                                  ),
+                            if (!mounted) return;
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (context) => CheckConnection(
+                                  child: ChatScreen(contact: contact),
                                 ),
-                              );
-                            }
+                              ),
+                            );
                           },
                         ),
                       );

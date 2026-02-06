@@ -26,11 +26,14 @@ class _QrScannerState extends ConsumerState<QrScanner> {
   Future<void> _handleQrCode(String? scannedData) async {
     if (scannedData == null) return;
 
+    if (!mounted) return;
     ref.read(isLoadingProvider.notifier).state = true;
 
     try {
       // Check if the scanned data is in the correct format
       if (!scannedData.startsWith('LINKUP:')) {
+        if (!mounted) return;
+        ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -38,7 +41,6 @@ class _QrScannerState extends ConsumerState<QrScanner> {
             backgroundColor: Colors.redAccent,
           ),
         );
-        ref.read(isLoadingProvider.notifier).state = false;
         return;
       }
 
@@ -49,13 +51,14 @@ class _QrScannerState extends ConsumerState<QrScanner> {
       // Check if trying to add yourself
       if (scannedUserId == currentUser!.uid) {
         if (!mounted) return;
+        ref.read(isLoadingProvider.notifier).state = false;
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('You cannot add yourself as a contact'),
             backgroundColor: Colors.orange,
           ),
         );
-        ref.read(isLoadingProvider.notifier).state = false;
         return;
       }
 
@@ -65,7 +68,11 @@ class _QrScannerState extends ConsumerState<QrScanner> {
           .doc(scannedUserId)
           .get();
 
+      if (!mounted) return;
+
       if (!scannedUserDoc.exists) {
+        if (!mounted) return;
+        ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -73,7 +80,6 @@ class _QrScannerState extends ConsumerState<QrScanner> {
             backgroundColor: Colors.redAccent,
           ),
         );
-        ref.read(isLoadingProvider.notifier).state = false;
         return;
       }
 
@@ -87,7 +93,11 @@ class _QrScannerState extends ConsumerState<QrScanner> {
           .doc(scannedUserId)
           .get();
 
+      if (!mounted) return;
+
       if (existingContact.exists) {
+        if (!mounted) return;
+        ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -95,6 +105,7 @@ class _QrScannerState extends ConsumerState<QrScanner> {
             backgroundColor: Colors.orange,
           ),
         );
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const LandingPage()),
         );
@@ -120,6 +131,8 @@ class _QrScannerState extends ConsumerState<QrScanner> {
           .doc(currentUser.uid)
           .get();
 
+      if (!mounted) return;
+
       final currentUserData = currentUserDoc.data()!;
 
       await FirebaseFirestore.instance
@@ -135,6 +148,8 @@ class _QrScannerState extends ConsumerState<QrScanner> {
           });
 
       if (!mounted) return;
+      ref.read(isLoadingProvider.notifier).state = false;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Contact added successfully!'),
@@ -142,10 +157,13 @@ class _QrScannerState extends ConsumerState<QrScanner> {
         ),
       );
 
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const LandingPage()),
       );
     } catch (e) {
+      if (!mounted) return;
+      ref.read(isLoadingProvider.notifier).state = false;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -155,7 +173,6 @@ class _QrScannerState extends ConsumerState<QrScanner> {
           backgroundColor: Colors.redAccent,
         ),
       );
-      ref.read(isLoadingProvider.notifier).state = false;
     }
   }
 

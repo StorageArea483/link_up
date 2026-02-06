@@ -376,21 +376,23 @@ class LandingPage extends ConsumerWidget {
                       if (!context.mounted) return;
                       ref.read(isLoadingProvider.notifier).state = true;
                       final newName = nameController.text.trim();
-                      if (newName.isEmpty) return;
+                      if (newName.isEmpty) {
+                        if (!context.mounted) return;
+                        ref.read(isLoadingProvider.notifier).state = false;
+                        return;
+                      }
 
                       final currentUser = FirebaseAuth.instance.currentUser;
                       if (currentUser == null) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('User not logged in'),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
-                        }
-                        if (context.mounted) {
-                          ref.read(isLoadingProvider.notifier).state = false;
-                        }
+                        if (!context.mounted) return;
+                        ref.read(isLoadingProvider.notifier).state = false;
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('User not logged in'),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
                         return;
                       }
 
@@ -401,6 +403,8 @@ class LandingPage extends ConsumerWidget {
                             .doc(contact.uid)
                             .get();
 
+                        if (!context.mounted) return;
+
                         if (contactUserDoc.exists) {
                           // Update the contact name in the current user's contacts subcollection
                           await FirebaseFirestore.instance
@@ -410,38 +414,39 @@ class LandingPage extends ConsumerWidget {
                               .doc(contact.uid)
                               .update({'contact name': newName});
 
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Contact updated successfully'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                            ref.read(isLoadingProvider.notifier).state = false;
-                            if (context.mounted) Navigator.pop(context);
-                            ref.invalidate(userContactProvider);
-                          }
-                        } else {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Contact user does not exist'),
-                                backgroundColor: Colors.redAccent,
-                              ),
-                            );
-                            ref.read(isLoadingProvider.notifier).state = false;
-                          }
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
+                          if (!context.mounted) return;
+                          ref.read(isLoadingProvider.notifier).state = false;
+                          if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Error updating contact'),
+                              content: Text('Contact updated successfully'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                          ref.invalidate(userContactProvider);
+                        } else {
+                          if (!context.mounted) return;
+                          ref.read(isLoadingProvider.notifier).state = false;
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Contact user does not exist'),
                               backgroundColor: Colors.redAccent,
                             ),
                           );
-                          ref.read(isLoadingProvider.notifier).state = false;
                         }
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ref.read(isLoadingProvider.notifier).state = false;
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Error updating contact'),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
                       }
                     },
                     style: ElevatedButton.styleFrom(

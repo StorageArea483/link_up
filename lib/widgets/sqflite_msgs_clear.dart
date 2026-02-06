@@ -84,28 +84,27 @@ class SqfliteMsgsClear {
 
     try {
       // Show loading indicator only if context is still mounted
-      if (_isMounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
+      if (!_isMounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
                 ),
-                SizedBox(width: 12),
-                Text('Clearing messages...'),
-              ],
-            ),
-            backgroundColor: AppColors.primaryBlue,
-            duration: Duration(seconds: 2),
+              ),
+              SizedBox(width: 12),
+              Text('Clearing messages...'),
+            ],
           ),
-        );
-      }
+          backgroundColor: AppColors.primaryBlue,
+          duration: Duration(seconds: 2),
+        ),
+      );
 
       // Clear messages from local SQLite database
       await SqfliteHelper.clearChatMessages(chatId!);
@@ -115,35 +114,35 @@ class SqfliteMsgsClear {
         await ChatService.deleteMessageFromAppwrite(doc.$id);
       }
       // Only update UI if context is still mounted
-      if (_isMounted) {
-        // Clear the UI immediately
-        ref.read(messagesProvider.notifier).state = [];
+      if (!_isMounted) return;
+      // Clear the UI immediately
+      ref.read(messagesProvider.notifier).state = [];
 
-        // Also invalidate the last message provider for this contact
-        if (contactUid != null) {
-          ref.invalidate(lastMessageProvider(contactUid!));
-        }
-
-        // Show success message only if context is still mounted
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All messages cleared successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
+      // Also invalidate the last message provider for this contact
+      if (contactUid != null) {
+        if (!_isMounted) return;
+        ref.invalidate(lastMessageProvider(contactUid!));
       }
+
+      // Show success message only if context is still mounted
+      if (!_isMounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All messages cleared successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
     } catch (e) {
       // Show error message only if context is still mounted
-      if (_isMounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to clear messages. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
+      if (!_isMounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to clear messages. Please try again.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
   }
 }

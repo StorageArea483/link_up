@@ -231,8 +231,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       // Always try to load from SQLite first to get delivered messages
       final offlineMessages = await SqfliteHelper.getDeliveredMessages(chatId);
+      final isOnline = await ref.watch(networkConnectivityProvider.future);
+      if (!mounted) return false;
+      final cachedMessages = ref.read(cachedMessagesProvider(chatId));
 
-      // Try to load from Appwrite for sent status messages
+      if (!isOnline && offlineMessages.isEmpty) {
+        // User is offline and no cached messages in SQLite
+        // Check if we have messages in our local cache from previous online session
+        if (cachedMessages.isNotEmpty) {
+          if (!mounted) return false;
+          ref.read(messagesProvider.notifier).state = cachedMessages;
+          return true;
+        }
+        // No messages anywhere - set empty state
+        if (!mounted) return false;
+        ref.read(messagesProvider.notifier).state = [];
+        return false;
+      }
+
+      if (!isOnline && offlineMessages.isNotEmpty) {
+        // User is offline but has cached messages in SQLite - show them
+        if (!mounted) return false;
+        ref.read(messagesProvider.notifier).state = offlineMessages;
+        if (!mounted) return false;
+        ref.read(cachedMessagesProvider(chatId).notifier).state =
+            offlineMessages; // Update cache provider
+        return true;
+      }
+
+      // User is online - try to load from Appwrite for sent status messages
       final docs = await ChatService.getMessages(chatId);
       if (mounted) {
         final sentMessages = docs.documents
@@ -246,17 +273,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
         // Update the provider with all messages
         ref.read(messagesProvider.notifier).state = allMessages;
+        if (!mounted) return false;
+        ref.read(cachedMessagesProvider(chatId).notifier).state =
+            allMessages; // Update local cache
       }
     } catch (e) {
-      // On error, load from SQLite only
+      // On error, try to use cached messages first
       if (!mounted) return false;
       final chatId = ref.read(chatIdProvider);
-      if (chatId != null && mounted) {
+      if (chatId == null) return false;
+
+      final cachedMessages = ref.read(cachedMessagesProvider(chatId));
+      if (cachedMessages.isNotEmpty) {
+        ref.read(messagesProvider.notifier).state = cachedMessages;
+        return true;
+      }
+
+      // If no cached messages, load from SQLite only
+      if (mounted) {
         final offlineMessages = await SqfliteHelper.getDeliveredMessages(
           chatId,
         );
         if (!mounted) return false;
         ref.read(messagesProvider.notifier).state = offlineMessages;
+        if (!mounted) return false;
+        ref.read(cachedMessagesProvider(chatId).notifier).state =
+            offlineMessages; // Update cache provider
       }
       return false;
     }
@@ -447,6 +489,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final currentUserId = ref.read(currentUserIdProvider);
     final chatId = ref.read(chatIdProvider);
+    if (!mounted) return;
     final networkOnlineAsync = ref.read(networkConnectivityProvider);
     final hasInternet = networkOnlineAsync.value ?? true;
 
@@ -458,14 +501,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Check internet connectivity first
     if (!hasInternet) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Message failed to send - No internet connection'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Message failed to send - No internet connection'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -485,6 +527,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final newMessage = Message.fromJson(
           messageDoc.data,
         ); // message with status sent gets added in appwrite db
+        if (!mounted) return;
         final currentMessages = ref.read(messagesProvider);
         if (!mounted) return;
         ref.read(messagesProvider.notifier).state = [
@@ -597,23 +640,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _markMessagesAsDeliveredAndUpdate(_currentUserId!);
       }
 
-      // Only reload messages if we don't have any messages currently
+      // Restore cached messages first if provider is empty
       if (!mounted) return;
       final currentMessages = ref.read(messagesProvider);
-      if (currentMessages.isEmpty) {
-        _reloadMessagesAfterReconnection();
+      if (!mounted) return;
+      if (_chatId == null) return;
+      final cachedMessages = ref.read(cachedMessagesProvider(_chatId!));
+      if (currentMessages.isEmpty && cachedMessages.isNotEmpty) {
+        if (!mounted) return;
+        ref.read(messagesProvider.notifier).state = cachedMessages;
       }
+
+      // Then reload to get latest messages from server
+      _reloadMessagesAfterReconnection();
 
       _checkUserPresence();
     } else {
+      // Going offline - preserve current messages in cache
+      if (!mounted) return;
+      final currentMessages = ref.read(messagesProvider);
+      if (currentMessages.isNotEmpty && _chatId != null) {
+        if (!mounted) return;
+        ref.read(cachedMessagesProvider(_chatId!).notifier).state =
+            currentMessages;
+      }
+
       messageSubscription?.pause();
       typingSubscription?.pause();
       presenceSubscription?.pause();
 
-      if (mounted) {
-        ref.read(isOnlineProvider.notifier).state =
-            false; // update the receiver online status to offline
-      }
+      if (!mounted) return;
+      ref.read(isOnlineProvider.notifier).state =
+          false; // update the receiver online status to offline
     }
   }
 
@@ -656,6 +714,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
           if (mounted) {
             ref.read(messagesProvider.notifier).state = mergedMessages;
+            ref.read(cachedMessagesProvider(chatId).notifier).state =
+                mergedMessages; // Update cache provider
           }
         } else {
           // No new messages from Appwrite, but don't clear existing messages
@@ -666,6 +726,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             );
             if (!mounted) return;
             ref.read(messagesProvider.notifier).state = offlineMessages;
+            ref.read(cachedMessagesProvider(chatId).notifier).state =
+                offlineMessages; // Update cache provider
           }
           // If we have existing messages, keep them as they are
         }
@@ -683,6 +745,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         );
         if (!mounted) return;
         ref.read(messagesProvider.notifier).state = offlineMessages;
+        ref.read(cachedMessagesProvider(chatId).notifier).state =
+            offlineMessages;
       }
     }
   }
@@ -831,24 +895,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     final messages = ref.watch(messagesProvider);
+    final networkOnlineAsync = ref.watch(networkConnectivityProvider);
+    final isOnline = networkOnlineAsync.value ?? true;
 
     if (messages.isEmpty) {
-      return const Expanded(
+      return Expanded(
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                Icons.chat_bubble_outline_rounded,
+                isOnline
+                    ? Icons.chat_bubble_outline_rounded
+                    : Icons.cloud_off_rounded,
                 size: 64,
                 color: AppColors.textFooter,
               ),
-              SizedBox(height: 16),
-              Text('No messages yet', style: AppTextStyles.footer),
-              SizedBox(height: 8),
+              const SizedBox(height: 16),
               Text(
-                'Send a message to start chatting',
-                style: TextStyle(fontSize: 12, color: AppColors.textFooter),
+                isOnline ? 'No messages yet' : 'No internet connection',
+                style: AppTextStyles.footer,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isOnline
+                    ? 'Send a message to start chatting'
+                    : 'Connect to the internet to load messages',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textFooter,
+                ),
               ),
             ],
           ),
@@ -1059,28 +1135,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final image = await ImagePicker().pickImage(source: source);
     if (image == null) return false;
 
+    if (!mounted) return false;
     final currentUserId = ref.read(currentUserIdProvider);
+    if (!mounted) return false;
     final chatId = ref.read(chatIdProvider);
 
     if (currentUserId == null || chatId == null || !mounted) return false;
 
     // Check internet connection
+    if (!mounted) return false;
     final networkOnlineAsync = ref.read(networkConnectivityProvider);
     final hasInternet = networkOnlineAsync.value ?? true;
     if (!hasInternet) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No internet connection'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No internet connection'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return false;
     }
 
     try {
       // Show uploading indicator if needed, but for now we proceed
+      if (!mounted) return false;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -1096,6 +1175,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         file: InputFile.fromPath(path: image.path),
       );
 
+      if (!mounted) return false;
+
       // Send message with imageId and imagePath
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
@@ -1106,46 +1187,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         imagePath: image.path,
       );
 
+      if (!mounted) return false;
+
       if (messageDoc != null && mounted) {
         final newMessage = Message.fromJson(messageDoc.data);
+        if (!mounted) return false;
         final currentMessages = ref.read(messagesProvider);
 
-        if (!mounted) return true;
-        if (mounted) {
-          ref.read(messagesProvider.notifier).state = [
-            newMessage,
-            ...currentMessages,
-          ];
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image uploaded successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+        if (!mounted) return false;
+        ref.read(messagesProvider.notifier).state = [
+          newMessage,
+          ...currentMessages,
+        ];
+        if (!mounted) return false;
+        Navigator.pop(context);
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image uploaded successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
 
         try {
-          if (mounted) ref.invalidate(lastMessageProvider(widget.contact.uid));
+          if (!mounted) return false;
+          ref.invalidate(lastMessageProvider(widget.contact.uid));
         } catch (e) {}
       } else {
         // If message creation failed (messageDoc is null), we must still pop the dialog!
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to send image message'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        if (!mounted) return false;
+        Navigator.pop(context);
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to send image message'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
 
       return true;
     } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-      }
+      if (!mounted) return false;
+      Navigator.pop(context);
       debugPrint('Error uploading image: $e');
       return false;
     }

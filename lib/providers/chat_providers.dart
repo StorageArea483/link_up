@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:link_up/config/appwrite_client.dart';
 import 'package:link_up/database/sqflite_helper.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/services/chat_service.dart';
@@ -22,6 +23,13 @@ final currentUserIdProvider = StateProvider<String?>((ref) => null);
 
 // Chat ID provider
 final chatIdProvider = StateProvider<String?>((ref) => null);
+// Image preview provider (Family: fileId)
+final imagePreviewProvider = FutureProvider.family<List<int>, String>((
+  ref,
+  fileId,
+) async {
+  return await storage.getFilePreview(bucketId: bucketId, fileId: fileId);
+});
 
 // Unread count provider (Family: contactId)
 final unreadCountProvider = FutureProvider.family<int, String>((
@@ -38,6 +46,11 @@ final unreadCountProvider = FutureProvider.family<int, String>((
         currentUserId, // Current user is the receiver for unread messages
   );
 });
+
+// Cached messages provider (Family: chatId) - Stores messages in memory per chat
+final cachedMessagesProvider = StateProvider.family<List<Message>, String>(
+  (ref, chatId) => [],
+);
 
 // Last message provider (Family: contactId) - Fetches from SQLite
 final lastMessageProvider = FutureProvider.family<String, String>((

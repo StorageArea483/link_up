@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:link_up/database/sqflite_helper.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/services/chat_service.dart';
-import 'package:link_up/config/appwrite_client.dart';
 
 // Loading state provider
 final isLoadingStateProvider = StateProvider<bool>((ref) => true);
@@ -58,12 +57,4 @@ final lastMessageProvider = FutureProvider.family<String, String>((
     return messages.first.text;
   }
   return '';
-});
-
-// Image preview provider (Family: fileId)
-final imagePreviewProvider = FutureProvider.family<List<int>, String>((
-  ref,
-  fileId,
-) async {
-  return await storage.getFilePreview(bucketId: bucketId, fileId: fileId);
 });

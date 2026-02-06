@@ -19,6 +19,7 @@ class ChatService {
     required String receiverId,
     required String text,
     String? imageId,
+    String? imagePath,
   }) async {
     try {
       final Map<String, dynamic> data = {
@@ -32,6 +33,10 @@ class ChatService {
 
       if (imageId != null) {
         data['imageId'] = imageId;
+      }
+
+      if (imagePath != null) {
+        data['imagePath'] = imagePath;
       }
 
       return await databases.createDocument(

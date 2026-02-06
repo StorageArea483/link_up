@@ -1,5 +1,5 @@
 import 'package:appwrite/appwrite.dart';
-import 'dart:typed_data';
+import 'dart:io' as io;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +15,7 @@ import 'package:link_up/styles/styles.dart';
 import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'package:link_up/database/sqflite_helper.dart';
+import 'package:link_up/widgets/image_bubble.dart';
 import 'package:link_up/widgets/sqflite_msgs_clear.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -900,10 +901,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             if (message.imageId != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
-                child: MessageImageBubble(fileId: message.imageId!),
+                child: message.imagePath != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(
+                          io.File(message.imagePath!),
+                          width: 250,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return ImageBubble(fileId: message.imageId!);
+                          },
+                        ),
+                      )
+                    : ImageBubble(fileId: message.imageId!),
               ),
             if (message.text.isNotEmpty &&
-                (message.imageId == null || message.text != '📷 Image'))
+                (message.imageId == null || message.text != 'Image'))
               Text(
                 message.text,
                 style: TextStyle(
@@ -1083,13 +1096,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         file: InputFile.fromPath(path: image.path),
       );
 
-      // Send message with imageId
+      // Send message with imageId and imagePath
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
         receiverId: widget.contact.uid,
         text: 'Image',
         imageId: file.$id,
+        imagePath: image.path,
       );
 
       if (messageDoc != null && mounted) {
@@ -1149,52 +1163,5 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
-  }
-}
-
-class MessageImageBubble extends ConsumerWidget {
-  final String fileId;
-
-  const MessageImageBubble({super.key, required this.fileId});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final imageAsync = ref.watch(imagePreviewProvider(fileId));
-
-    return imageAsync.when(
-      data: (data) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.memory(
-            Uint8List.fromList(data),
-            width: 250,
-            fit: BoxFit.cover,
-          ),
-        );
-      },
-      loading: () => Container(
-        width: 250,
-        height: 150,
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: AppColors.primaryBlue,
-          ),
-        ),
-      ),
-      error: (error, stack) => Container(
-        width: 250,
-        height: 150,
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Center(child: Icon(Icons.error, color: Colors.grey)),
-      ),
-    );
   }
 }

@@ -7,7 +7,7 @@ class ImageBubble extends StatelessWidget {
 
   const ImageBubble({super.key, required this.fileId});
 
-  String get imageUrl =>
+  String get _imageUrl =>
       'https://fra.cloud.appwrite.io/v1/storage/buckets/$bucketId/files/$fileId/view?project=697035fd003aa22ae623';
 
   @override
@@ -15,7 +15,7 @@ class ImageBubble extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Image.network(
-        imageUrl,
+        _imageUrl,
         width: 250,
         fit: BoxFit.cover,
         loadingBuilder: (context, child, loadingProgress) {
@@ -43,8 +43,16 @@ class ImageBubble extends StatelessWidget {
               color: Colors.grey[200],
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Center(
-              child: Icon(Icons.broken_image, color: Colors.grey),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.wifi_off, color: Colors.grey, size: 48),
+                const SizedBox(height: 8),
+                Text(
+                  'Image unavailable offline',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+              ],
             ),
           );
         },

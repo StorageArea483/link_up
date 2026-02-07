@@ -16,6 +16,7 @@ class SqfliteHelper {
   static const String columnSenderId = 'senderId';
   static const String columnReceiverId = 'receiverId';
   static const String columnText = 'text';
+  static const String columnImageId = 'imageId';
   static const String columnStatus = 'status';
   static const String columnCreatedAt = 'createdAt';
 
@@ -48,12 +49,15 @@ class SqfliteHelper {
         $columnSenderId TEXT NOT NULL,
         $columnReceiverId TEXT NOT NULL,
         $columnText TEXT NOT NULL,
+        $columnImageId TEXT,
         $columnStatus TEXT NOT NULL,
         $columnCreatedAt TEXT NOT NULL
       )
     ''');
   }
 
+  /// Insert a delivered message into SQLite database
+  /// Only stores metadata - images will be loaded from Appwrite when online
   static Future<bool> insertDeliveredMessage(Message message) async {
     if (message.status != 'delivered') {
       return false;
@@ -68,6 +72,7 @@ class SqfliteHelper {
         columnSenderId: message.senderId,
         columnReceiverId: message.receiverId,
         columnText: message.text,
+        columnImageId: message.imageId,
         columnStatus: message.status,
         columnCreatedAt: message.createdAt.toIso8601String(),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -99,6 +104,8 @@ class SqfliteHelper {
           senderId: map[columnSenderId],
           receiverId: map[columnReceiverId],
           text: map[columnText],
+          imageId: map[columnImageId],
+          imagePath: null, // No local path stored
           status: map[columnStatus],
           createdAt: DateTime.parse(map[columnCreatedAt]),
         );
@@ -129,6 +136,8 @@ class SqfliteHelper {
           senderId: map[columnSenderId],
           receiverId: map[columnReceiverId],
           text: map[columnText],
+          imageId: map[columnImageId],
+          imagePath: null, // No local path stored
           status: map[columnStatus],
           createdAt: DateTime.parse(map[columnCreatedAt]),
         );

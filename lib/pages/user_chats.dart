@@ -324,7 +324,6 @@ class _UserChatsState extends ConsumerState<UserChats> {
                             color: AppColors.textSecondary,
                           ),
                           onTap: () {
-                            if (!mounted) return;
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
                                 builder: (context) => CheckConnection(

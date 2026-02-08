@@ -13,7 +13,7 @@ import 'package:link_up/styles/styles.dart';
 import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'package:link_up/database/sqflite_helper.dart';
-import 'package:link_up/widgets/chat_storage/image_bubble.dart';
+import 'package:link_up/widgets/images_storage/image_bubble.dart';
 import 'package:link_up/database/sqflite_msgs_clear.dart';
 import 'package:link_up/widgets/audio_storage/audio_messages.dart';
 import 'package:link_up/widgets/images_storage/images_messages.dart';

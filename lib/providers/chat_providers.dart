@@ -23,6 +23,18 @@ final currentUserIdProvider = StateProvider<String?>((ref) => null);
 
 // Chat ID provider
 final chatIdProvider = StateProvider<String?>((ref) => null);
+
+final toggleRecordingProvider = StateProvider<bool>((ref) => false);
+
+final recordingPathProvider = StateProvider<String?>((ref) => null);
+
+// Voice preview playback state
+final isPlayingPreviewProvider = StateProvider<bool>((ref) => false);
+
+final positionProvider = StateProvider<Duration>((ref) => Duration.zero);
+
+final durationProvider = StateProvider<Duration>((ref) => Duration.zero);
+
 // Image preview provider (Family: fileId)
 final imagePreviewProvider = FutureProvider.family<List<int>, String>((
   ref,

@@ -1,10 +1,8 @@
-import 'package:appwrite/appwrite.dart';
 import 'dart:io' as io;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:link_up/config/appwrite_client.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/models/user_contacts.dart';
 import 'package:link_up/pages/landing_page.dart';
@@ -17,6 +15,9 @@ import 'package:link_up/widgets/check_connection.dart';
 import 'package:link_up/database/sqflite_helper.dart';
 import 'package:link_up/widgets/chat_storage/image_bubble.dart';
 import 'package:link_up/database/sqflite_msgs_clear.dart';
+import 'package:link_up/widgets/audio_storage/audio_messages.dart';
+import 'package:link_up/widgets/images_storage/images_messages.dart';
+import 'package:record/record.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final UserContacts contact;
@@ -36,6 +37,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   String? _currentUserId;
   String? _chatId;
   bool _wasOnline = true;
+  late final AudioRecorder _record;
+  final player = AudioPlayer();
+  late final AudioMessagesHandler _audioHandler;
 
   // Helper method to merge messages without losing any
   List<Message> _mergeMessages(
@@ -70,6 +74,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         // Prevent running logic on a State that no longer exists.
       }
       _initializeChat();
+      _record = AudioRecorder();
+      _audioHandler = AudioMessagesHandler(
+        ref: ref,
+        context: context,
+        record: _record,
+        player: player,
+      );
+      player.positionStream.listen((p) {
+        ref.read(positionProvider.notifier).state = p;
+      });
+      player.durationStream.listen((d) {
+        ref.read(durationProvider.notifier).state = d!;
+      });
     });
   }
 
@@ -87,6 +104,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         isTyping: false,
       );
     }
+    _record.dispose();
+    player.stop(); // Stop any playing audio
+    player.dispose();
     super.dispose();
   }
 
@@ -1037,191 +1057,88 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
       decoration: const BoxDecoration(color: AppColors.white),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: const Icon(
-              Icons.add_circle_outline_rounded,
-              color: AppColors.primaryBlue,
-              size: 28,
-            ),
-            onPressed: () async {
-              final imagePicker = await _pickImage(ImageSource.gallery);
-              if (!imagePicker && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Failed to upload image'),
-                    backgroundColor: Colors.red,
+          // Audio preview widget
+          AudioPreviewWidget(handler: _audioHandler),
+          // Input Row
+          Row(
+            children: [
+              // Image input buttons
+              ImageInputButtons(contact: widget.contact),
+              // Audio recording button
+              AudioRecordingButton(
+                currentUserId: _currentUserId,
+                handler: _audioHandler,
+              ),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: AppColors.primaryBlue.withOpacity(0.1),
+                    ),
                   ),
-                );
-              }
-            },
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.camera_alt_outlined,
-              color: AppColors.textSecondary,
-            ),
-            onPressed: () async {
-              final imagePicker = await _pickImage(ImageSource.camera);
-              if (!imagePicker && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Failed to upload image'),
-                    backgroundColor: Colors.red,
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final toggleRecording = ref.watch(
+                        toggleRecordingProvider,
+                      );
+                      final recordingPath = ref.watch(recordingPathProvider);
+                      return TextField(
+                        controller: _messageController,
+                        onChanged: _onTypingChanged,
+                        decoration: InputDecoration(
+                          hintText: toggleRecording
+                              ? 'Recording...'
+                              : recordingPath != null
+                              ? 'Voice message ready'
+                              : 'Type a message...',
+                          border: InputBorder.none,
+                          hintStyle: AppTextStyles.footer,
+                        ),
+                        maxLines: null,
+                      );
+                    },
                   ),
-                );
-              }
-            },
-          ),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: AppColors.primaryBlue.withOpacity(0.1),
                 ),
               ),
-              child: TextField(
-                controller: _messageController,
-                onChanged: _onTypingChanged,
-                decoration: const InputDecoration(
-                  hintText: 'Type a message...',
-                  border: InputBorder.none,
-                  hintStyle: AppTextStyles.footer,
-                ),
-                maxLines: null,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Consumer(
-            builder: (context, ref, _) {
-              return CircleAvatar(
-                backgroundColor: AppColors.primaryBlue,
-                radius: 24,
-                child: ref.watch(isLoadingStateProvider)
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.white,
-                            strokeWidth: 2,
+              const SizedBox(width: 4),
+              Consumer(
+                builder: (context, ref, _) {
+                  return CircleAvatar(
+                    backgroundColor: AppColors.primaryBlue,
+                    radius: 24,
+                    child: ref.watch(isLoadingStateProvider)
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: AppColors.white,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(
+                              Icons.send_rounded,
+                              color: AppColors.white,
+                              size: 20,
+                            ),
+                            onPressed: _sendMessage,
                           ),
-                        ),
-                      )
-                    : IconButton(
-                        icon: const Icon(
-                          Icons.send_rounded,
-                          color: AppColors.white,
-                          size: 20,
-                        ),
-                        onPressed: _sendMessage,
-                      ),
-              );
-            },
+                  );
+                },
+              ),
+            ],
           ),
         ],
       ),
     );
-  }
-
-  Future<bool> _pickImage(ImageSource source) async {
-    final image = await ImagePicker().pickImage(source: source);
-    if (image == null) return false;
-
-    final currentUserId = ref.read(currentUserIdProvider);
-    final chatId = ref.read(chatIdProvider);
-
-    if (currentUserId == null || chatId == null || !mounted) return false;
-
-    // Check internet connection
-    final networkOnlineAsync = ref.read(networkConnectivityProvider);
-    final hasInternet = networkOnlineAsync.value ?? true;
-    if (!hasInternet) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No internet connection'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return false;
-    }
-
-    try {
-      // Show uploading indicator if needed, but for now we proceed
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(
-            backgroundColor: AppColors.primaryBlue,
-          ),
-        ),
-      );
-      final file = await storage.createFile(
-        bucketId: bucketId,
-        fileId: ID.unique(),
-        file: InputFile.fromPath(path: image.path),
-      );
-
-      // Send message with imageId and imagePath
-      final messageDoc = await ChatService.sendMessage(
-        chatId: chatId,
-        senderId: currentUserId,
-        receiverId: widget.contact.uid,
-        text: 'Image',
-        imageId: file.$id,
-        imagePath: image.path,
-      );
-
-      if (messageDoc != null && mounted) {
-        final newMessage = Message.fromJson(messageDoc.data);
-        final currentMessages = ref.read(messagesProvider);
-
-        if (!mounted) return true;
-        if (mounted) {
-          ref.read(messagesProvider.notifier).state = [
-            newMessage,
-            ...currentMessages,
-          ];
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image uploaded successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-
-        try {
-          if (mounted) ref.invalidate(lastMessageProvider(widget.contact.uid));
-        } catch (e) {}
-      } else {
-        // If message creation failed (messageDoc is null), we must still pop the dialog!
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to send image message'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-
-      return true;
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-      }
-      return false;
-    }
   }
 
   // Format timestamp

@@ -21,6 +21,21 @@
 		</array>
 	</dict>
 </array>
+
+<key>UIBackgroundModes</key>
+<array>
+  <string>audio</string>
+  <string>fetch</string>
+</array>
+
+<key>NSMicrophoneUsageDescription</key>
+<string>This app needs access to your microphone to record voice messages for chat.</string>
+
+<key>NSCameraUsageDescription</key>
+<string>This app needs access to your camera to take photos for chat messages.</string>
+
+<key>NSPhotoLibraryUsageDescription</key>
+<string>This app needs access to your photo library to select images for chat messages.</string>
 <!-- End of the Google Sign-in Section -->
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>

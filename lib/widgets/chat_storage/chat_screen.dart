@@ -39,7 +39,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _wasOnline = true;
   late final AudioRecorder _record;
   final player = AudioPlayer();
-  late final AudioMessagesHandler _audioHandler;
+  AudioMessagesHandler? _audioHandler;
 
   // Helper method to merge messages without losing any
   List<Message> _mergeMessages(
@@ -82,10 +82,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         player: player,
       );
       player.positionStream.listen((p) {
-        ref.read(positionProvider.notifier).state = p;
+        if (mounted && _audioHandler != null) {
+          // Only update position if audio hasn't completed
+          if (!_audioHandler!.shouldBlockUpdates) {
+            ref.read(positionProvider.notifier).state = p;
+          }
+        }
       });
       player.durationStream.listen((d) {
-        ref.read(durationProvider.notifier).state = d!;
+        if (mounted && d != null && _audioHandler != null) {
+          // Only update duration if audio hasn't completed
+          if (!_audioHandler!.shouldBlockUpdates) {
+            ref.read(durationProvider.notifier).state = d;
+          }
+        }
       });
     });
   }
@@ -105,8 +115,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
     }
     _record.dispose();
-    player.stop(); // Stop any playing audio
-    player.dispose();
+    _audioHandler?.dispose(); // Dispose the audio handler if it exists
     super.dispose();
   }
 
@@ -1054,6 +1063,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildInputSection() {
+    // Don't render input section if audio handler is not initialized yet
+    if (_audioHandler == null) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
       decoration: const BoxDecoration(color: AppColors.white),
@@ -1061,7 +1075,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Audio preview widget
-          AudioPreviewWidget(handler: _audioHandler),
+          AudioPreviewWidget(handler: _audioHandler!),
           // Input Row
           Row(
             children: [
@@ -1070,7 +1084,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               // Audio recording button
               AudioRecordingButton(
                 currentUserId: _currentUserId,
-                handler: _audioHandler,
+                handler: _audioHandler!,
               ),
               Expanded(
                 child: Container(

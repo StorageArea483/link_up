@@ -18,6 +18,10 @@ import 'package:link_up/database/sqflite_msgs_clear.dart';
 import 'package:link_up/widgets/audio_storage/audio_messages.dart';
 import 'package:link_up/widgets/images_storage/images_messages.dart';
 import 'package:record/record.dart';
+import 'package:dio/dio.dart';
+import 'package:gallery_saver/gallery_saver.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:link_up/config/appwrite_client.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final UserContacts contact;
@@ -204,15 +208,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             updatedMessagesList.insert(0, updatedMsg);
           }
 
-          // Save to SQLite and delete from Appwrite
-          final savedSuccessfully = await SqfliteHelper.insertDeliveredMessage(
-            updatedMsg,
-          );
-
-          if (savedSuccessfully && mounted) {
-            await ChatService.deleteMessageFromAppwrite(updatedMsg.id);
-          }
+          // Handle the delivered message (save locally, download if image, delete from cloud)
+          await _handleDeliveredMessage(updatedMsg);
         }
+
+        // Sort by creation time (newest first) to maintain order
 
         // Sort by creation time (newest first) to maintain order
         updatedMessagesList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -390,14 +390,43 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _handleDeliveredMessage(Message message) async {
-    // Save message to SQLite (with imageUrl generated inside insertDeliveredMessage)
-    final savedSuccessfully = await SqfliteHelper.insertDeliveredMessage(
-      message,
-    );
+    try {
+      // Only the RECEIVER should perform download/save/delete actions
+      if (message.receiverId != _currentUserId) return;
 
-    // Delete message from Appwrite database if saved successfully
-    if (savedSuccessfully) {
-      await ChatService.deleteMessageFromAppwrite(message.id);
+      // Safety check
+      if (message.imageId == null) return;
+
+      // 1. Get temporary directory (safe for intermediate downloads)
+      final dir =
+          await getApplicationDocumentsDirectory(); // fetches the path according to the device
+      final savePath =
+          '${dir.path}/${message.imageId}.jpg'; // fetches the path where the image will be saved
+
+      final imageUrl =
+          'https://fra.cloud.appwrite.io/v1/storage/buckets/$bucketId/files/${message.imageId}/view?project=697035fd003aa22ae623';
+
+      // 2. Always download the image (overwrite-safe)
+      await Dio().download(imageUrl, savePath);
+
+      // 3. Save downloaded image to device gallery
+      final savedToGallery = await GallerySaver.saveImage(
+        savePath,
+        albumName: 'LinkUp',
+      );
+
+      if (savedToGallery == null) return;
+
+      // 4. Only proceed if gallery save succeeded
+      if (savedToGallery == true) {
+        // Delete image from Appwrite Storage
+        await storage.deleteFile(bucketId: bucketId, fileId: message.imageId!);
+
+        // Delete message document from Appwrite Database
+        await ChatService.deleteMessageFromAppwrite(message.id);
+      }
+    } catch (e) {
+      debugPrint('Error handling delivered image message: $e');
     }
   }
 

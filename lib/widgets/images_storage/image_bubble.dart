@@ -25,7 +25,9 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
   Future<void> _checkLocalFile() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/${widget.fileId}.jpg');
+      final file = File(
+        '${dir.path}/LinkUp storage/Images/${widget.fileId}.jpg',
+      );
       if (await file.exists()) {
         if (mounted) {
           ref.read(localFileProvider.notifier).state = file;

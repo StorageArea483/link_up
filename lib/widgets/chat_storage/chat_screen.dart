@@ -397,19 +397,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // Safety check
       if (message.imageId == null) return;
 
-      // 1. Get temporary directory (safe for intermediate downloads)
-      final dir =
-          await getApplicationDocumentsDirectory(); // fetches the path according to the device
-      final savePath =
-          '${dir.path}/${message.imageId}.jpg'; // fetches the path where the image will be saved
+      // 1. Get document directory
+      final dir = await getApplicationDocumentsDirectory();
+
+      // 2. Create the custom directory structure: LinkUp storage/Images
+      final storageDir = io.Directory('${dir.path}/LinkUp storage/Images');
+      if (!await storageDir.exists()) {
+        await storageDir.create(recursive: true);
+      }
+
+      final savePath = '${storageDir.path}/${message.imageId}.jpg';
 
       final imageUrl =
           'https://fra.cloud.appwrite.io/v1/storage/buckets/$bucketId/files/${message.imageId}/view?project=697035fd003aa22ae623';
 
-      // 2. Always download the image (overwrite-safe)
+      // 3. Always download the image (overwrite-safe)
       await Dio().download(imageUrl, savePath);
 
-      // 3. Save downloaded image to device gallery
+      // 4. Save downloaded image to device gallery
       final savedToGallery = await GallerySaver.saveImage(
         savePath,
         albumName: 'LinkUp',
@@ -417,7 +422,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       if (savedToGallery == null) return;
 
-      // 4. Only proceed if gallery save succeeded
+      // 5. Only proceed if gallery save succeeded
       if (savedToGallery == true) {
         // Delete image from Appwrite Storage
         await storage.deleteFile(bucketId: bucketId, fileId: message.imageId!);

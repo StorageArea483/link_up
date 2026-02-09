@@ -1,4 +1,6 @@
+import 'dart:io' as io;
 import 'package:appwrite/appwrite.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -47,6 +49,18 @@ class ImageMessagesHandler {
         fileId: ID.unique(),
         file: InputFile.fromPath(path: image.path),
       );
+
+      // Save locally for the sender as well
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        final storageDir = io.Directory('${dir.path}/LinkUp storage/Images');
+        if (!await storageDir.exists()) {
+          await storageDir.create(recursive: true);
+        }
+        await io.File(image.path).copy('${storageDir.path}/${file.$id}.jpg');
+      } catch (e) {
+        // Ignore local save error, upload succeeded
+      }
 
       // Send message with imageId and imagePath
       final messageDoc = await ChatService.sendMessage(

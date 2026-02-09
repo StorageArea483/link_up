@@ -20,6 +20,8 @@ class ChatService {
     required String text,
     String? imageId,
     String? imagePath,
+    String? audioId,
+    String? audioPath,
   }) async {
     try {
       final Map<String, dynamic> data = {
@@ -37,6 +39,14 @@ class ChatService {
 
       if (imagePath != null) {
         data['imagePath'] = imagePath;
+      }
+
+      if (audioId != null) {
+        data['audioId'] = audioId;
+      }
+
+      if (audioPath != null) {
+        data['audioPath'] = audioPath;
       }
 
       return await databases.createDocument(

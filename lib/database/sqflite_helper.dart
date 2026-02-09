@@ -17,6 +17,8 @@ class SqfliteHelper {
   static const String columnReceiverId = 'receiverId';
   static const String columnText = 'text';
   static const String columnImageId = 'imageId';
+  static const String columnAudioId = 'audioId';
+  static const String columnAudioPath = 'audioPath';
   static const String columnStatus = 'status';
   static const String columnCreatedAt = 'createdAt';
 
@@ -50,6 +52,8 @@ class SqfliteHelper {
         $columnReceiverId TEXT NOT NULL,
         $columnText TEXT NOT NULL,
         $columnImageId TEXT,
+        $columnAudioId TEXT,
+        $columnAudioPath TEXT,
         $columnStatus TEXT NOT NULL,
         $columnCreatedAt TEXT NOT NULL
       )
@@ -73,6 +77,8 @@ class SqfliteHelper {
         columnReceiverId: message.receiverId,
         columnText: message.text,
         columnImageId: message.imageId,
+        columnAudioId: message.audioId,
+        columnAudioPath: message.audioPath,
         columnStatus: message.status,
         columnCreatedAt: message.createdAt.toIso8601String(),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -106,6 +112,8 @@ class SqfliteHelper {
           text: map[columnText],
           imageId: map[columnImageId],
           imagePath: null, // No local path stored
+          audioId: map[columnAudioId],
+          audioPath: map[columnAudioPath],
           status: map[columnStatus],
           createdAt: DateTime.parse(map[columnCreatedAt]),
         );
@@ -138,6 +146,8 @@ class SqfliteHelper {
           text: map[columnText],
           imageId: map[columnImageId],
           imagePath: null, // No local path stored
+          audioId: map[columnAudioId],
+          audioPath: map[columnAudioPath],
           status: map[columnStatus],
           createdAt: DateTime.parse(map[columnCreatedAt]),
         );

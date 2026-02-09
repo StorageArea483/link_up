@@ -1,7 +1,13 @@
 import 'dart:io' as io;
+import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:link_up/config/appwrite_client.dart';
+import 'package:link_up/models/message.dart';
+import 'package:link_up/models/user_contacts.dart';
+import 'package:link_up/providers/connectivity_provider.dart';
+import 'package:link_up/services/chat_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:link_up/providers/chat_providers.dart';
@@ -12,6 +18,7 @@ class AudioMessagesHandler {
   final BuildContext context;
   final AudioRecorder record;
   final AudioPlayer player;
+  final UserContacts contact;
   bool _isAudioCompleted = false; // Flag to track if audio has completed
 
   AudioMessagesHandler({
@@ -19,6 +26,7 @@ class AudioMessagesHandler {
     required this.context,
     required this.record,
     required this.player,
+    required this.contact,
   }) {
     _initializePlayer();
   }
@@ -66,14 +74,22 @@ class AudioMessagesHandler {
       }
     } catch (e) {
       ref.read(toggleRecordingProvider.notifier).state = false;
-      _showSnackBar('Audio recording failed: ${e.toString()}', Colors.red);
+      _showSnackBar('Audio recording failed}', Colors.red);
     }
   }
 
   Future<void> stopRecording() async {
     try {
+      if (!context.mounted) return;
+      final networkOnlineAsync = ref.read(networkConnectivityProvider);
+      if (!context.mounted) return;
+      final currentUserId = ref.read(currentUserIdProvider);
+      if (!context.mounted) return;
+      final chatId = ref.read(chatIdProvider);
       final recordedPath = await record.stop();
       ref.read(toggleRecordingProvider.notifier).state = false;
+
+      if (chatId == null || currentUserId == null) return;
 
       if (recordedPath != null) {
         // Verify the file exists and has content
@@ -84,6 +100,55 @@ class AudioMessagesHandler {
           if (fileSize > 1000) {
             // At least 1KB for a meaningful recording
             ref.read(recordingPathProvider.notifier).state = recordedPath;
+            final hasInternet = networkOnlineAsync.value ?? true;
+            if (!hasInternet) {
+              _showSnackBar('No internet connection', Colors.red);
+              return;
+            }
+            try {
+              // Show uploading indicator
+              _showUploadingDialog();
+              final file = await storage.createFile(
+                bucketId: bucketId,
+                fileId: ID.unique(),
+                file: InputFile.fromPath(path: recordedPath),
+              );
+
+              // Send message with imageId and imagePath
+              final messageDoc = await ChatService.sendMessage(
+                chatId: chatId,
+                senderId: currentUserId,
+                receiverId: contact.uid,
+                text: 'Audio',
+                audioId: file.$id,
+                audioPath: recordedPath,
+              );
+
+              if (messageDoc != null) {
+                final newMessage = Message.fromJson(messageDoc.data);
+                final currentMessages = ref.read(messagesProvider);
+
+                ref.read(messagesProvider.notifier).state = [
+                  newMessage,
+                  ...currentMessages,
+                ];
+
+                Navigator.pop(context); // Close uploading dialog
+                _showSnackBar('Audio uploaded successfully', Colors.green);
+
+                try {
+                  ref.invalidate(lastMessageProvider(contact.uid));
+                } catch (e) {
+                  // Handle invalidation error silently
+                }
+              } else {
+                Navigator.pop(context);
+                _showSnackBar('Failed to send audio', Colors.red);
+              }
+            } catch (e) {
+              Navigator.pop(context);
+              return;
+            }
           } else {
             _showSnackBar('Recording is too short or empty', Colors.orange);
             // Still save it for testing purposes
@@ -185,6 +250,18 @@ class AudioMessagesHandler {
     final minutes = d.inMinutes.remainder(60);
     final seconds = d.inSeconds.remainder(60);
     return "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+  }
+
+  void _showUploadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(
+          backgroundColor: AppColors.primaryBlue,
+        ),
+      ),
+    );
   }
 
   Future<String> _getUniqueRecordingPath({required String userId}) async {

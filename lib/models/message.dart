@@ -6,6 +6,8 @@ class Message {
   final String text;
   final String? imageId;
   final String? imagePath;
+  final String? audioId;
+  final String? audioPath;
   final String status;
   final DateTime createdAt;
 
@@ -17,6 +19,8 @@ class Message {
     required this.text,
     this.imageId,
     this.imagePath,
+    this.audioId,
+    this.audioPath,
     required this.status,
     required this.createdAt,
   });
@@ -30,6 +34,8 @@ class Message {
       text: json['text'] ?? '',
       imageId: json['imageId'],
       imagePath: json['imagePath'],
+      audioId: json['audioId'],
+      audioPath: json['audioPath'],
       status: json['status'] ?? 'sent',
       createdAt: DateTime.parse(json['createdAt']),
     );

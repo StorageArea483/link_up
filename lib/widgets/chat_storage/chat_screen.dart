@@ -80,6 +80,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         context: context,
         record: _record,
         player: player,
+        contact: widget.contact,
       );
       player.positionStream.listen((p) {
         if (mounted && _audioHandler != null) {

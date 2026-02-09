@@ -12,9 +12,7 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-  } catch (e) {
-    debugPrint('Firebase initialization error: $e');
-  }
+  } catch (e) {}
 
   runApp(const ProviderScope(child: MyApp()));
 }

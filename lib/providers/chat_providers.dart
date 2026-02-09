@@ -9,7 +9,9 @@ import 'package:link_up/models/message.dart';
 import 'package:link_up/services/chat_service.dart';
 
 // Loading state provider
-final isLoadingStateProvider = StateProvider.autoDispose<bool>((ref) => true);
+final isLoadingStateProvider = StateProvider<bool>((ref) => true);
+
+final isLoadingChatScreenProvider = StateProvider<bool>((ref) => true);
 
 // Messages list provider
 final messagesProvider = StateProvider<List<Message>>((ref) => []);

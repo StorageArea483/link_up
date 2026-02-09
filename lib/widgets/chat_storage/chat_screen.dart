@@ -18,8 +18,8 @@ import 'package:link_up/database/sqflite_msgs_clear.dart';
 import 'package:link_up/widgets/audio_storage/audio_messages.dart';
 import 'package:link_up/widgets/images_storage/images_messages.dart';
 import 'package:record/record.dart';
+import 'package:gal/gal.dart';
 import 'package:dio/dio.dart';
-import 'package:gallery_saver/gallery_saver.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:link_up/config/appwrite_client.dart';
 
@@ -136,7 +136,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     if (userId == null) {
       if (mounted) {
-        ref.read(isLoadingStateProvider.notifier).state = false;
+        ref.read(isLoadingChatScreenProvider.notifier).state = false;
       }
       return;
     }
@@ -170,7 +170,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Only update loading state if widget is still mounted
     if (mounted) {
-      ref.read(isLoadingStateProvider.notifier).state = false;
+      ref.read(isLoadingChatScreenProvider.notifier).state = false;
     }
   }
 
@@ -415,20 +415,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       await Dio().download(imageUrl, savePath);
 
       // 4. Save downloaded image to device gallery
-      final savedToGallery = await GallerySaver.saveImage(
-        savePath,
-        albumName: 'LinkUp',
-      );
+      // 4. Save downloaded image to device gallery
+      try {
+        await Gal.putImage(savePath, album: 'LinkUp');
 
-      if (savedToGallery == null) return;
-
-      // 5. Only proceed if gallery save succeeded
-      if (savedToGallery == true) {
         // Delete image from Appwrite Storage
         await storage.deleteFile(bucketId: bucketId, fileId: message.imageId!);
 
         // Delete message document from Appwrite Database
         await ChatService.deleteMessageFromAppwrite(message.id);
+      } catch (e) {
+        debugPrint('Failed to save image to gallery: $e');
       }
     } catch (e) {
       debugPrint('Error handling delivered image message: $e');
@@ -934,7 +931,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   // Build messages list
   Widget _buildMessagesList() {
-    final isLoading = ref.watch(isLoadingStateProvider);
+    final isLoading = ref.watch(isLoadingChatScreenProvider);
     final currentUserId = ref.watch(currentUserIdProvider);
 
     if (isLoading) {
@@ -1161,7 +1158,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   return CircleAvatar(
                     backgroundColor: AppColors.primaryBlue,
                     radius: 24,
-                    child: ref.watch(isLoadingStateProvider)
+                    child: ref.watch(isLoadingChatScreenProvider)
                         ? const SizedBox(
                             width: 24,
                             height: 24,

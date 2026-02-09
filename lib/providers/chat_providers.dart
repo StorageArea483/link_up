@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -7,7 +9,7 @@ import 'package:link_up/models/message.dart';
 import 'package:link_up/services/chat_service.dart';
 
 // Loading state provider
-final isLoadingStateProvider = StateProvider<bool>((ref) => true);
+final isLoadingStateProvider = StateProvider.autoDispose<bool>((ref) => true);
 
 // Messages list provider
 final messagesProvider = StateProvider<List<Message>>((ref) => []);
@@ -23,6 +25,9 @@ final currentUserIdProvider = StateProvider<String?>((ref) => null);
 
 // Chat ID provider
 final chatIdProvider = StateProvider<String?>((ref) => null);
+
+// Local File provider
+final localFileProvider = StateProvider<File?>((ref) => null);
 
 final toggleRecordingProvider = StateProvider<bool>((ref) => false);
 

@@ -1,22 +1,21 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/config/appwrite_client.dart';
+import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:path_provider/path_provider.dart';
 
-class ImageBubble extends StatefulWidget {
+class ImageBubble extends ConsumerStatefulWidget {
   final String fileId;
 
   const ImageBubble({super.key, required this.fileId});
 
   @override
-  State<ImageBubble> createState() => _ImageBubbleState();
+  ConsumerState<ImageBubble> createState() => _ImageBubbleState();
 }
 
-class _ImageBubbleState extends State<ImageBubble> {
-  File? _localFile;
-  bool _isLoading = true;
-
+class _ImageBubbleState extends ConsumerState<ImageBubble> {
   @override
   void initState() {
     super.initState();
@@ -29,23 +28,17 @@ class _ImageBubbleState extends State<ImageBubble> {
       final file = File('${dir.path}/${widget.fileId}.jpg');
       if (await file.exists()) {
         if (mounted) {
-          setState(() {
-            _localFile = file;
-            _isLoading = false;
-          });
+          ref.read(localFileProvider.notifier).state = file;
+          ref.read(isLoadingStateProvider.notifier).state = false;
         }
       } else {
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
+          ref.read(isLoadingStateProvider.notifier).state = false;
         }
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        ref.read(isLoadingStateProvider.notifier).state = false;
       }
     }
   }
@@ -55,7 +48,7 @@ class _ImageBubbleState extends State<ImageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (ref.watch(isLoadingStateProvider)) {
       return Container(
         width: 250,
         height: 150,
@@ -74,9 +67,9 @@ class _ImageBubbleState extends State<ImageBubble> {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: _localFile != null
+      child: ref.watch(localFileProvider) != null
           ? Image.file(
-              _localFile!,
+              ref.watch(localFileProvider)!,
               width: 250,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {

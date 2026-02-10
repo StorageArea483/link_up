@@ -59,13 +59,17 @@ class ImageMessagesHandler {
           await storageDir.create(recursive: true);
         }
         final savePath = '${storageDir.path}/${file.$id}.jpg';
-        await io.File(image.path).copy(savePath);
 
-        // Also save to gallery for sender
-        try {
-          await Gal.putImage(savePath, album: 'LinkUp');
-        } catch (e) {
-          // Ignore gallery save error
+        // Only save if file doesn't already exist
+        if (!await io.File(savePath).exists()) {
+          await io.File(image.path).copy(savePath);
+
+          // Also save to gallery for sender (only if newly saved)
+          try {
+            await Gal.putImage(savePath, album: 'LinkUp');
+          } catch (e) {
+            // Ignore gallery save error
+          }
         }
       } catch (e) {
         // Ignore local save error, upload succeeded

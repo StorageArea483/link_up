@@ -440,10 +440,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       // Check if image already exists locally
       if (await io.File(savePath).exists()) {
-        // Image already downloaded, just save to gallery and cleanup
+        // Image already exists, just cleanup cloud storage (no need to save to gallery again)
         try {
-          await Gal.putImage(savePath, album: 'LinkUp');
-
           // Delete image from Appwrite Storage
           await storage.deleteFile(
             bucketId: bucketId,
@@ -459,10 +457,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final imageUrl =
           'https://fra.cloud.appwrite.io/v1/storage/buckets/$bucketId/files/${message.imageId}/view?project=697035fd003aa22ae623';
 
-      // 3. Download the image
+      // 3. Download the image (only if it doesn't exist)
       await Dio().download(imageUrl, savePath);
 
-      // 4. Save downloaded image to device gallery
+      // 4. Save downloaded image to device gallery (only once)
       try {
         await Gal.putImage(savePath, album: 'LinkUp');
 

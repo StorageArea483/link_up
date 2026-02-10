@@ -13,22 +13,6 @@ final isLoadingStateProvider = StateProvider<bool>((ref) => true);
 
 final isLoadingChatScreenProvider = StateProvider<bool>((ref) => true);
 
-// Image loading states - tracks which images are still loading
-final imageLoadingStatesProvider = StateProvider<Map<String, bool>>((ref) => {});
-
-// Combined loading state that considers both messages and images
-final isChatFullyLoadedProvider = Provider<bool>((ref) {
-  final isLoadingChat = ref.watch(isLoadingChatScreenProvider);
-  final imageLoadingStates = ref.watch(imageLoadingStatesProvider);
-  
-  // If chat is still loading, return false
-  if (isLoadingChat) return false;
-  
-  // If any images are still loading, return false
-  final hasLoadingImages = imageLoadingStates.values.any((isLoading) => isLoading);
-  return !hasLoadingImages;
-});
-
 // Messages list provider
 final messagesProvider = StateProvider<List<Message>>((ref) => []);
 

@@ -72,11 +72,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-        // Prevent running logic on a State that no longer exists.
+      if (!mounted) return;
+      final cachedMessages = ref.read(messagesProvider);
+
+      // Only show loading if we don't have cached messages
+      if (cachedMessages.isEmpty) {
+        ref.read(isLoadingChatScreenProvider.notifier).state = true;
+      } else {
+        // We have cached messages, show them immediately - already in provider
+        ref.read(isLoadingChatScreenProvider.notifier).state = false;
       }
+
       _initializeChat();
       _record = AudioRecorder();
       _audioHandler = AudioMessagesHandler(
@@ -88,7 +96,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
       player.positionStream.listen((p) {
         if (mounted && _audioHandler != null) {
-          // Only update position if audio hasn't completed
           if (!_audioHandler!.shouldBlockUpdates) {
             ref.read(positionProvider.notifier).state = p;
           }
@@ -96,7 +103,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
       player.durationStream.listen((d) {
         if (mounted && d != null && _audioHandler != null) {
-          // Only update duration if audio hasn't completed
           if (!_audioHandler!.shouldBlockUpdates) {
             ref.read(durationProvider.notifier).state = d;
           }
@@ -131,8 +137,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _currentUserId = userId;
 
     if (!mounted) return;
-    ref.read(currentUserIdProvider.notifier).state =
-        userId; // this provider indicates the current user using the app
+    ref.read(currentUserIdProvider.notifier).state = userId;
 
     if (userId == null) {
       if (mounted) {
@@ -145,16 +150,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _chatId = chatId;
 
     if (!mounted) return;
-    ref.read(chatIdProvider.notifier).state =
-        chatId; // the current chat id between authenticated users
+    ref.read(chatIdProvider.notifier).state = chatId;
 
     // Set current user as online
-    await ChatService.updatePresence(
-      userId: userId,
-      online: true,
-    ); // updating the current users presence to online and firing the _subscribeToPresence method
+    await ChatService.updatePresence(userId: userId, online: true);
 
-    // IMPORTANT: Load messages first to ensure UI displays them
+    // Check if we already have cached messages
+    final cachedMessages = ref.read(messagesProvider);
+    final hasCache = cachedMessages.isNotEmpty;
+
+    // Load messages (will update cache if needed)
     await _loadMessages();
 
     // Set up subscriptions
@@ -162,14 +167,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _subscribeToTyping();
     _subscribeToPresence();
 
-    // Check contact's presence after setting up subscriptions
+    // Check contact's presence
     await _checkUserPresence();
 
-    // Mark messages as delivered when user comes online and update UI
+    // Mark messages as delivered
     await _markMessagesAsDeliveredAndUpdate(userId);
 
-    // Only update loading state if widget is still mounted
-    if (mounted) {
+    // Only set loading to false if we didn't have cache
+    // (if we had cache, it was already set to false in initState)
+    if (!hasCache && mounted) {
       ref.read(isLoadingChatScreenProvider.notifier).state = false;
     }
   }
@@ -250,71 +256,92 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (!mounted) return false;
 
     try {
-      final chatId = ref.read(
-        chatIdProvider,
-      ); // indicating current chat between users
+      final chatId = ref.read(chatIdProvider);
       if (chatId == null) return false;
 
-      // Always try to load from SQLite first to get delivered messages
+      // Check if we already have cached messages in the provider
+      final currentMessages = ref.read(messagesProvider);
+      final cachedMessages = ref.read(cachedMessagesProvider(chatId));
+
+      // If messagesProvider already has messages, we're good
+      if (currentMessages.isNotEmpty) {
+        // Still fetch from database in background to update if needed
+        final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+          chatId,
+        );
+        final isOnline = await ref.watch(networkConnectivityProvider.future);
+
+        if (isOnline) {
+          final docs = await ChatService.getMessages(chatId);
+          final sentMessages = docs.documents
+              .map((doc) => Message.fromJson(doc.data))
+              .toList();
+
+          // Merge and update cache
+          final allMessages = _mergeMessages(sentMessages, offlineMessages);
+          if (mounted) {
+            ref.read(messagesProvider.notifier).state = allMessages;
+            ref.read(cachedMessagesProvider(chatId).notifier).state =
+                allMessages;
+          }
+        }
+        return true;
+      }
+
+      // No messages in provider, load from SQLite first
       final offlineMessages = await SqfliteHelper.getDeliveredMessages(chatId);
       final isOnline = await ref.watch(networkConnectivityProvider.future);
       if (!mounted) return false;
-      final cachedMessages = ref.read(cachedMessagesProvider(chatId));
 
       if (!isOnline && offlineMessages.isEmpty) {
-        // User is offline and no cached messages in SQLite
-        // Check if we have messages in our local cache from previous online session
+        // Offline and no cached messages - check memory cache
         if (cachedMessages.isNotEmpty) {
           if (!mounted) return false;
           ref.read(messagesProvider.notifier).state = cachedMessages;
           return true;
         }
-        // No messages anywhere - set empty state
+        // No messages anywhere
         if (!mounted) return false;
         ref.read(messagesProvider.notifier).state = [];
         return false;
       }
 
       if (!isOnline && offlineMessages.isNotEmpty) {
-        // User is offline but has cached messages in SQLite - show them
+        // Offline but has SQLite messages
         if (!mounted) return false;
         ref.read(messagesProvider.notifier).state = offlineMessages;
         if (!mounted) return false;
         ref.read(cachedMessagesProvider(chatId).notifier).state =
-            offlineMessages; // Update cache provider
+            offlineMessages;
         return true;
       }
 
-      // User is online - try to load from Appwrite for sent status messages
+      // Online - fetch from Appwrite
       final docs = await ChatService.getMessages(chatId);
       if (mounted) {
         final sentMessages = docs.documents
             .map((doc) => Message.fromJson(doc.data))
-            .toList(); // sent status messages list
+            .toList();
 
-        // Merge offline and online messages using helper method
         final allMessages = _mergeMessages(sentMessages, offlineMessages);
 
         if (!mounted) return false;
-
-        // Update the provider with all messages
         ref.read(messagesProvider.notifier).state = allMessages;
         if (!mounted) return false;
-        ref.read(cachedMessagesProvider(chatId).notifier).state =
-            allMessages; // Update local cache
+        ref.read(cachedMessagesProvider(chatId).notifier).state = allMessages;
       }
     } catch (e) {
-      // On error, try to use cached messages first
       if (!mounted) return false;
       final chatId = ref.read(chatIdProvider);
-      if (chatId == null && !mounted) return false;
-      final cachedMessages = ref.read(cachedMessagesProvider(chatId!));
+      if (chatId == null) return false;
+
+      final cachedMessages = ref.read(cachedMessagesProvider(chatId));
       if (cachedMessages.isNotEmpty) {
         ref.read(messagesProvider.notifier).state = cachedMessages;
         return true;
       }
 
-      // If no cached messages, load from SQLite only
+      // Load from SQLite as fallback
       if (mounted) {
         final offlineMessages = await SqfliteHelper.getDeliveredMessages(
           chatId,
@@ -323,7 +350,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ref.read(messagesProvider.notifier).state = offlineMessages;
         if (!mounted) return false;
         ref.read(cachedMessagesProvider(chatId).notifier).state =
-            offlineMessages; // Update cache provider
+            offlineMessages;
       }
       return false;
     }

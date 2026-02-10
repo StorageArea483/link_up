@@ -1,5 +1,6 @@
 import 'dart:io' as io;
 import 'package:appwrite/appwrite.dart';
+import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -57,19 +58,26 @@ class ImageMessagesHandler {
         if (!await storageDir.exists()) {
           await storageDir.create(recursive: true);
         }
-        await io.File(image.path).copy('${storageDir.path}/${file.$id}.jpg');
+        final savePath = '${storageDir.path}/${file.$id}.jpg';
+        await io.File(image.path).copy(savePath);
+
+        // Also save to gallery for sender
+        try {
+          await Gal.putImage(savePath, album: 'LinkUp');
+        } catch (e) {
+          // Ignore gallery save error
+        }
       } catch (e) {
         // Ignore local save error, upload succeeded
       }
 
-      // Send message with imageId and imagePath
+      // Send message with imageId only (no imagePath since it's temporary)
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
         receiverId: contact.uid,
         text: 'Image',
         imageId: file.$id,
-        imagePath: image.path,
       );
 
       if (messageDoc != null) {

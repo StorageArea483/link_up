@@ -19,7 +19,6 @@ class ChatService {
     required String receiverId,
     required String text,
     String? imageId,
-    String? imagePath,
     String? audioId,
     String? audioPath,
   }) async {
@@ -35,10 +34,6 @@ class ChatService {
 
       if (imageId != null) {
         data['imageId'] = imageId;
-      }
-
-      if (imagePath != null) {
-        data['imagePath'] = imagePath;
       }
 
       if (audioId != null) {

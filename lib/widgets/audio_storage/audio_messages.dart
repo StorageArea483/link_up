@@ -114,7 +114,7 @@ class AudioMessagesHandler {
                 file: InputFile.fromPath(path: recordedPath),
               );
 
-              // Send message with imageId and imagePath
+              // Send message with audioId and audioPath
               final messageDoc = await ChatService.sendMessage(
                 chatId: chatId,
                 senderId: currentUserId,

@@ -7,9 +7,9 @@ import 'package:link_up/styles/styles.dart';
 import 'package:path_provider/path_provider.dart';
 
 class ImageBubble extends ConsumerStatefulWidget {
-  final String fileId;
+  final String imageId;
 
-  const ImageBubble({super.key, required this.fileId});
+  const ImageBubble({super.key, required this.imageId});
 
   @override
   ConsumerState<ImageBubble> createState() => _ImageBubbleState();
@@ -26,7 +26,7 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File(
-        '${dir.path}/LinkUp storage/Images/${widget.fileId}.jpg',
+        '${dir.path}/LinkUp storage/Images/${widget.imageId}.jpg',
       );
       if (await file.exists()) {
         if (mounted) {
@@ -46,7 +46,7 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
   }
 
   String get _imageUrl =>
-      'https://fra.cloud.appwrite.io/v1/storage/buckets/$bucketId/files/${widget.fileId}/view?project=697035fd003aa22ae623';
+      'https://fra.cloud.appwrite.io/v1/storage/buckets/$bucketId/files/${widget.imageId}/view?project=697035fd003aa22ae623';
 
   @override
   Widget build(BuildContext context) {

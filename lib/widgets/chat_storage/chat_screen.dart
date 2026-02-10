@@ -391,7 +391,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _handleDeliveredMessage(Message message) async {
     try {
-      // Only the RECEIVER should perform download/save/delete actions
       if (message.receiverId != _currentUserId) return;
 
       // Safety check
@@ -408,13 +407,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       final savePath = '${storageDir.path}/${message.imageId}.jpg';
 
+      // Check if image already exists locally
+      if (await io.File(savePath).exists()) {
+        // Image already downloaded, just save to gallery and cleanup
+        try {
+          await Gal.putImage(savePath, album: 'LinkUp');
+
+          // Delete image from Appwrite Storage
+          await storage.deleteFile(
+            bucketId: bucketId,
+            fileId: message.imageId!,
+          );
+
+          // Delete message document from Appwrite Database
+          await ChatService.deleteMessageFromAppwrite(message.id);
+        } catch (e) {}
+        return;
+      }
+
       final imageUrl =
           'https://fra.cloud.appwrite.io/v1/storage/buckets/$bucketId/files/${message.imageId}/view?project=697035fd003aa22ae623';
 
-      // 3. Always download the image (overwrite-safe)
+      // 3. Download the image
       await Dio().download(imageUrl, savePath);
 
-      // 4. Save downloaded image to device gallery
       // 4. Save downloaded image to device gallery
       try {
         await Gal.putImage(savePath, album: 'LinkUp');
@@ -424,12 +440,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
         // Delete message document from Appwrite Database
         await ChatService.deleteMessageFromAppwrite(message.id);
-      } catch (e) {
-        debugPrint('Failed to save image to gallery: $e');
-      }
-    } catch (e) {
-      debugPrint('Error handling delivered image message: $e');
-    }
+      } catch (e) {}
+    } catch (e) {}
   }
 
   // Mark a single specific message as delivered (for real-time auto-delivery)
@@ -1033,22 +1045,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             if (message.imageId != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
-                child:
-                    message.imagePath != null &&
-                        io.File(message.imagePath!).existsSync()
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          io.File(message.imagePath!),
-                          width: 250,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            // If local file fails, load from Appwrite
-                            return ImageBubble(fileId: message.imageId!);
-                          },
-                        ),
-                      )
-                    : ImageBubble(fileId: message.imageId!),
+                child: ImageBubble(imageId: message.imageId!),
               ),
             if (message.text.isNotEmpty &&
                 (message.imageId == null || message.text != 'Image'))

@@ -111,7 +111,6 @@ class SqfliteHelper {
           receiverId: map[columnReceiverId],
           text: map[columnText],
           imageId: map[columnImageId],
-          imagePath: null, // No local path stored
           audioId: map[columnAudioId],
           audioPath: map[columnAudioPath],
           status: map[columnStatus],
@@ -145,7 +144,6 @@ class SqfliteHelper {
           receiverId: map[columnReceiverId],
           text: map[columnText],
           imageId: map[columnImageId],
-          imagePath: null, // No local path stored
           audioId: map[columnAudioId],
           audioPath: map[columnAudioPath],
           status: map[columnStatus],

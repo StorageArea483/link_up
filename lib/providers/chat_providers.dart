@@ -28,8 +28,15 @@ final currentUserIdProvider = StateProvider<String?>((ref) => null);
 // Chat ID provider
 final chatIdProvider = StateProvider<String?>((ref) => null);
 
-// Local File provider
-final localFileProvider = StateProvider<File?>((ref) => null);
+// Local File provider (Family: imageId) - Each image has its own file state
+final localFileProvider = StateProvider.family<File?, String>(
+  (ref, imageId) => null,
+);
+
+// Loading state provider (Family: imageId) - Each image has its own loading state
+final imageLoadingStateProvider = StateProvider.family<bool, String>(
+  (ref, imageId) => true,
+);
 
 final toggleRecordingProvider = StateProvider<bool>((ref) => false);
 

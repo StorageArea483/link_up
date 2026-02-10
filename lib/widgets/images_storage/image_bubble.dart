@@ -30,17 +30,20 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
       );
       if (await file.exists()) {
         if (mounted) {
-          ref.read(localFileProvider.notifier).state = file;
-          ref.read(isLoadingStateProvider.notifier).state = false;
+          ref.read(localFileProvider(widget.imageId).notifier).state = file;
+          ref.read(imageLoadingStateProvider(widget.imageId).notifier).state =
+              false;
         }
       } else {
         if (mounted) {
-          ref.read(isLoadingStateProvider.notifier).state = false;
+          ref.read(imageLoadingStateProvider(widget.imageId).notifier).state =
+              false;
         }
       }
     } catch (e) {
       if (mounted) {
-        ref.read(isLoadingStateProvider.notifier).state = false;
+        ref.read(imageLoadingStateProvider(widget.imageId).notifier).state =
+            false;
       }
     }
   }
@@ -50,7 +53,10 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    if (ref.watch(isLoadingStateProvider)) {
+    final isLoading = ref.watch(imageLoadingStateProvider(widget.imageId));
+    final localFile = ref.watch(localFileProvider(widget.imageId));
+
+    if (isLoading) {
       return Container(
         width: 250,
         height: 150,
@@ -69,9 +75,9 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: ref.watch(localFileProvider) != null
+      child: localFile != null
           ? Image.file(
-              ref.watch(localFileProvider)!,
+              localFile,
               width: 250,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {

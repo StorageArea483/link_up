@@ -53,22 +53,21 @@ final imageLoadingStateProvider = StateProvider.family<bool, (String, String?)>(
 );
 
 // Local Audio File provider (Family: audioId) - Each audio has its own file state
-final localAudioFileProvider = StateProvider.family<File?, String>((
+final localAudioFileProvider = StateProvider.family<File?, (String, String?)>((
   ref,
-  audioId,
+  params,
 ) {
   ref.keepAlive();
   return null;
 });
 
 // Audio Loading state provider (Family: audioId) - Each audio has its own loading state
-final audioLoadingStateProvider = StateProvider.family<bool, String>((
-  ref,
-  audioId,
-) {
-  ref.keepAlive();
-  return true;
-});
+final audioLoadingStateProvider = StateProvider.family<bool, (String, String?)>(
+  (ref, params) {
+    ref.keepAlive();
+    return true;
+  },
+);
 
 final toggleRecordingProvider = StateProvider<bool>((ref) => false);
 
@@ -105,7 +104,6 @@ final unreadCountProvider = FutureProvider.family<int, String>((
   );
 });
 
-// Last message provider (Family: contactId) - Fetches from SQLite
 final lastMessageProvider = FutureProvider.family<String, String>((
   ref,
   contactId,
@@ -114,13 +112,63 @@ final lastMessageProvider = FutureProvider.family<String, String>((
   if (currentUserId == null) return '';
 
   final chatId = ChatService.generateChatId(currentUserId, contactId);
-  final sentMessage = await ChatService.getLastMessage(chatId);
-  final messages = await SqfliteHelper.getLastMessage(chatId);
 
-  if (sentMessage.documents.isNotEmpty) {
-    return sentMessage.documents.first.data['text'];
-  } else if (messages.isNotEmpty) {
-    return messages.first.text;
+  try {
+    // Fetch from both sources
+    final sentMessageResult = await ChatService.getLastMessage(chatId);
+    final deliveredMessages = await SqfliteHelper.getLastMessage(chatId);
+
+    Message? latestMessage;
+    DateTime? latestTimestamp;
+
+    // Check Appwrite message (sent status)
+    if (sentMessageResult.documents.isNotEmpty) {
+      final sentMessageData = sentMessageResult.documents.first.data;
+      final sentTimestamp = DateTime.parse(
+        sentMessageData['createdAt'] ?? DateTime.now().toIso8601String(),
+      );
+
+      latestTimestamp = sentTimestamp;
+      latestMessage = Message(
+        id: sentMessageResult.documents.first.$id,
+        chatId: sentMessageData['chatId'] ?? chatId,
+        senderId: sentMessageData['senderId'] ?? '',
+        receiverId: sentMessageData['receiverId'] ?? '',
+        text: sentMessageData['text'] ?? '',
+        imageId: sentMessageData['imageId'],
+        audioId: sentMessageData['audioId'],
+        status: sentMessageData['status'] ?? 'sent',
+        createdAt: sentTimestamp,
+      );
+    }
+
+    // Check SQLite message (delivered status) and compare timestamps
+    if (deliveredMessages.isNotEmpty) {
+      final deliveredMessage = deliveredMessages.first;
+      final deliveredTimestamp = deliveredMessage.createdAt;
+
+      if (latestTimestamp == null ||
+          deliveredTimestamp.isAfter(latestTimestamp)) {
+        latestMessage = deliveredMessage;
+      }
+    }
+
+    // Return the text of the latest message
+    if (latestMessage != null) {
+      return latestMessage.text;
+    }
+
+    return '';
+  } catch (e) {
+    // On error, try to get at least the SQLite message as fallback
+    try {
+      final deliveredMessages = await SqfliteHelper.getLastMessage(chatId);
+      if (deliveredMessages.isNotEmpty) {
+        return deliveredMessages.first.text;
+      }
+    } catch (e) {
+      // If both fail, return empty string
+    }
+    return '';
   }
-  return '';
 });

@@ -20,7 +20,10 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
   @override
   void initState() {
     super.initState();
-    _checkLocalFile();
+    // Delay the provider modification until after the widget tree is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLocalFile();
+    });
   }
 
   @override
@@ -29,14 +32,29 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
   }
 
   Future<void> _checkLocalFile() async {
+    // Early return if chatId is null
+    if (widget.chatId == null) {
+      if (mounted) {
+        ref
+                .read(
+                  imageLoadingStateProvider((
+                    widget.imageId,
+                    widget.chatId,
+                  )).notifier,
+                )
+                .state =
+            false;
+      }
+      return;
+    }
+
     try {
       final dir = await getApplicationDocumentsDirectory();
       final filePath =
           '${dir.path}/LinkUp storage/Images/${widget.imageId}.jpg';
+
       final file = File(filePath);
-
       final exists = await file.exists();
-
       if (exists) {
         if (mounted) {
           ref
@@ -92,13 +110,27 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
 
   @override
   Widget build(BuildContext context) {
+    // Early return if chatId is null
+    if (widget.chatId == null) {
+      return Container(
+        width: 250,
+        height: 150,
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Center(
+          child: Icon(Icons.broken_image, color: Colors.grey, size: 48),
+        ),
+      );
+    }
+
     final isLoading = ref.watch(
       imageLoadingStateProvider((widget.imageId, widget.chatId)),
     );
     final localFile = ref.watch(
       localFileProvider((widget.imageId, widget.chatId!)),
     );
-
     if (isLoading) {
       return Container(
         width: 250,
@@ -115,7 +147,6 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
         ),
       );
     }
-
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: localFile != null

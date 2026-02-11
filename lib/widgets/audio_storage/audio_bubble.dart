@@ -9,11 +9,13 @@ import 'package:voice_message_package/voice_message_package.dart';
 class AudioBubble extends ConsumerStatefulWidget {
   final String audioId;
   final bool isSentByMe;
+  final String? chatId;
 
   const AudioBubble({
     super.key,
     required this.audioId,
     required this.isSentByMe,
+    required this.chatId,
   });
 
   @override
@@ -24,10 +26,28 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
   @override
   void initState() {
     super.initState();
-    _checkLocalFile();
+    // Delay the provider modification until after the widget tree is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLocalFile();
+    });
   }
 
   Future<void> _checkLocalFile() async {
+    // Early return if chatId is null
+    if (widget.chatId == null) {
+      if (mounted) {
+        ref
+                .read(
+                  imageLoadingStateProvider((
+                    widget.audioId,
+                    widget.chatId,
+                  )).notifier,
+                )
+                .state =
+            false;
+      }
+      return;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File(
@@ -35,20 +55,48 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
       );
       if (await file.exists()) {
         if (mounted) {
-          ref.read(localAudioFileProvider(widget.audioId).notifier).state =
+          ref
+                  .read(
+                    localAudioFileProvider((
+                      widget.audioId,
+                      widget.chatId,
+                    )).notifier,
+                  )
+                  .state =
               file;
-          ref.read(audioLoadingStateProvider(widget.audioId).notifier).state =
+          ref
+                  .read(
+                    audioLoadingStateProvider((
+                      widget.audioId,
+                      widget.chatId,
+                    )).notifier,
+                  )
+                  .state =
               false;
         }
       } else {
         if (mounted) {
-          ref.read(audioLoadingStateProvider(widget.audioId).notifier).state =
+          ref
+                  .read(
+                    audioLoadingStateProvider((
+                      widget.audioId,
+                      widget.chatId,
+                    )).notifier,
+                  )
+                  .state =
               false;
         }
       }
     } catch (e) {
       if (mounted) {
-        ref.read(audioLoadingStateProvider(widget.audioId).notifier).state =
+        ref
+                .read(
+                  audioLoadingStateProvider((
+                    widget.audioId,
+                    widget.chatId,
+                  )).notifier,
+                )
+                .state =
             false;
       }
     }
@@ -56,8 +104,12 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = ref.watch(audioLoadingStateProvider(widget.audioId));
-    final localFile = ref.watch(localAudioFileProvider(widget.audioId));
+    final isLoading = ref.watch(
+      audioLoadingStateProvider((widget.audioId, widget.chatId)),
+    );
+    final localFile = ref.watch(
+      localAudioFileProvider((widget.audioId, widget.chatId)),
+    );
 
     if (isLoading) {
       return Container(

@@ -1130,7 +1130,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             if (message.imageId != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
-                child: ImageBubble(imageId: message.imageId!, chatId: _chatId),
+                child: ImageBubble(
+                  imageId: message.imageId!,
+                  chatId:
+                      _chatId ??
+                      (_currentUserId != null
+                          ? ChatService.generateChatId(
+                              _currentUserId!,
+                              widget.contact.uid,
+                            )
+                          : null),
+                ),
               )
             else if (message.audioId != null)
               Padding(
@@ -1138,6 +1148,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: AudioBubble(
                   audioId: message.audioId!,
                   isSentByMe: isSentByMe,
+                  chatId: _chatId,
                 ),
               ),
             if (message.text.isNotEmpty &&

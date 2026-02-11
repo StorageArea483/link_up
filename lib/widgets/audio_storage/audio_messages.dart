@@ -48,7 +48,9 @@ class AudioMessagesHandler {
           // Reset the completed flag when audio starts playing again
           _isAudioCompleted = false;
         }
-      } catch (e) {}
+      } catch (e) {
+        // Handle error silently
+      }
     });
   }
 
@@ -62,6 +64,7 @@ class AudioMessagesHandler {
         _isAudioCompleted = false;
 
         final path = await _getUniqueRecordingPath(userId: userId);
+
         if (path.isEmpty) {
           if (context.mounted) {
             _showSnackBar('Failed to create recording path', Colors.red);
@@ -73,6 +76,7 @@ class AudioMessagesHandler {
           const RecordConfig(encoder: AudioEncoder.aacLc),
           path: path,
         );
+
         if (context.mounted) {
           ref.read(toggleRecordingProvider.notifier).state = true;
         }
@@ -84,27 +88,37 @@ class AudioMessagesHandler {
     } catch (e) {
       if (context.mounted) {
         ref.read(toggleRecordingProvider.notifier).state = false;
-        _showSnackBar('Audio recording failed', Colors.red);
+        _showSnackBar('Audio recording failed $e', Colors.red);
       }
     }
   }
 
   Future<void> stopRecording() async {
     try {
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
+
       final currentUserId = ref.read(currentUserIdProvider);
+
       if (!context.mounted) return;
       final chatId = ref.read(chatIdProvider);
+
       final recordedPath = await record.stop();
+
       if (!context.mounted) return;
       ref.read(toggleRecordingProvider.notifier).state = false;
 
-      if (chatId == null || currentUserId == null) return;
+      if (chatId == null || currentUserId == null) {
+        return;
+      }
 
       if (recordedPath != null) {
         // Verify the file exists and has content
         final file = io.File(recordedPath);
-        if (await file.exists()) {
+        final exists = await file.exists();
+
+        if (exists) {
           final fileSize = await file.length();
 
           if (fileSize > 1000) {
@@ -138,23 +152,31 @@ class AudioMessagesHandler {
   }
 
   Future<bool> sendAudioMessage() async {
-    if (!context.mounted) return false;
-    final recordingPath = ref.read(
-      recordingPathProvider,
-    ); // local path where file is actually present
-    if (recordingPath == null) return false;
+    if (!context.mounted) {
+      return false;
+    }
+
+    final recordingPath = ref.read(recordingPathProvider);
+
+    if (recordingPath == null) {
+      return false;
+    }
 
     if (!context.mounted) return false;
     final currentUserId = ref.read(currentUserIdProvider);
+
     if (!context.mounted) return false;
     final chatId = ref.read(chatIdProvider);
 
-    if (currentUserId == null || chatId == null) return false;
+    if (currentUserId == null || chatId == null) {
+      return false;
+    }
 
     // Check internet connection
     if (!context.mounted) return false;
     final networkOnlineAsync = ref.read(networkConnectivityProvider);
     final hasInternet = networkOnlineAsync.value ?? true;
+
     if (!hasInternet) {
       if (context.mounted) {
         _showSnackBar('No internet connection', Colors.red);
@@ -168,6 +190,24 @@ class AudioMessagesHandler {
         _showUploadingDialog();
       }
 
+      // Verify file exists before upload
+      final recordingFile = io.File(recordingPath);
+      if (!await recordingFile.exists()) {
+        if (context.mounted) {
+          Navigator.pop(context);
+          _showSnackBar('Recording file not found', Colors.red);
+        }
+        return false;
+      }
+
+      final fileSize = await recordingFile.length();
+      if (fileSize == 0) {
+        if (context.mounted) {
+          Navigator.pop(context);
+          _showSnackBar('Recording file is empty', Colors.red);
+        }
+        return false;
+      }
       final file = await storage.createFile(
         bucketId: bucketId,
         fileId: ID.unique(),
@@ -182,7 +222,6 @@ class AudioMessagesHandler {
           await storageDir.create(recursive: true);
         }
         final savePath = '${storageDir.path}/${file.$id}.m4a';
-
         // Only save if file doesn't already exist
         if (!await io.File(savePath).exists()) {
           await io.File(recordingPath).copy(savePath);
@@ -190,8 +229,6 @@ class AudioMessagesHandler {
       } catch (e) {
         // Ignore local save error, upload succeeded
       }
-
-      // Send message with audioId only
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
@@ -202,26 +239,24 @@ class AudioMessagesHandler {
 
       if (messageDoc != null) {
         final newMessage = Message.fromJson(messageDoc.data);
-        if (!context.mounted) return false;
-        final currentMessages = ref.read(messagesProvider(chatId));
+        if (!context.mounted) {
+          return false;
+        }
 
+        final currentMessages = ref.read(messagesProvider(chatId));
         if (!context.mounted) return false;
         ref.read(messagesProvider(chatId).notifier).state = [
           newMessage,
           ...currentMessages,
         ];
-
         // NEW: Save the sent message to SQLite immediately
         await SqfliteHelper.insertMessage(newMessage);
-
         if (context.mounted) {
           Navigator.pop(context); // Close uploading dialog
           _showSnackBar('Audio sent successfully', Colors.green);
         }
-
         // Clean up the recording
         await deleteRecording();
-
         try {
           if (context.mounted) {
             ref.invalidate(lastMessageProvider(contact.uid));
@@ -235,7 +270,6 @@ class AudioMessagesHandler {
           _showSnackBar('Failed to send audio message', Colors.red);
         }
       }
-
       return true;
     } catch (e) {
       if (context.mounted) {

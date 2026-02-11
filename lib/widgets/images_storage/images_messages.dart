@@ -12,6 +12,7 @@ import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
+import 'package:link_up/database/sqflite_helper.dart';
 
 class ImageMessagesHandler {
   final WidgetRef ref;
@@ -26,24 +27,35 @@ class ImageMessagesHandler {
 
   Future<bool> pickAndSendImage(ImageSource source) async {
     final image = await ImagePicker().pickImage(source: source);
-    if (image == null) return false;
+    if (image == null) {
+      return false;
+    }
 
+    if (!context.mounted) return false;
     final currentUserId = ref.read(currentUserIdProvider);
+    if (!context.mounted) return false;
     final chatId = ref.read(chatIdProvider);
 
-    if (currentUserId == null || chatId == null) return false;
+    if (currentUserId == null || chatId == null) {
+      return false;
+    }
 
     // Check internet connection
+    if (!context.mounted) return false;
     final networkOnlineAsync = ref.read(networkConnectivityProvider);
     final hasInternet = networkOnlineAsync.value ?? true;
     if (!hasInternet) {
-      _showSnackBar('No internet connection', Colors.red);
+      if (context.mounted) {
+        _showSnackBar('No internet connection', Colors.red);
+      }
       return false;
     }
 
     try {
       // Show uploading indicator
-      _showUploadingDialog();
+      if (context.mounted) {
+        _showUploadingDialog();
+      }
 
       final file = await storage.createFile(
         bucketId: bucketId,
@@ -72,7 +84,7 @@ class ImageMessagesHandler {
           }
         }
       } catch (e) {
-        // Ignore local save error, upload succeeded
+        // Ignore local save error
       }
 
       // Send message with imageId only (no imagePath since it's temporary)
@@ -86,29 +98,42 @@ class ImageMessagesHandler {
 
       if (messageDoc != null) {
         final newMessage = Message.fromJson(messageDoc.data);
-        final currentMessages = ref.read(messagesProvider);
+        if (!context.mounted) return false;
+        final currentMessages = ref.read(messagesProvider(chatId));
 
-        ref.read(messagesProvider.notifier).state = [
+        if (!context.mounted) return false;
+        ref.read(messagesProvider(chatId).notifier).state = [
           newMessage,
           ...currentMessages,
         ];
 
-        Navigator.pop(context); // Close uploading dialog
-        _showSnackBar('Image uploaded successfully', Colors.green);
+        // NEW: Save the sent message to SQLite immediately
+        await SqfliteHelper.insertMessage(newMessage);
+
+        if (context.mounted) {
+          Navigator.pop(context); // Close uploading dialog
+          _showSnackBar('Image uploaded successfully', Colors.green);
+        }
 
         try {
-          ref.invalidate(lastMessageProvider(contact.uid));
+          if (context.mounted) {
+            ref.invalidate(lastMessageProvider(contact.uid));
+          }
         } catch (e) {
           // Handle invalidation error silently
         }
       } else {
-        Navigator.pop(context);
-        _showSnackBar('Failed to send image message', Colors.red);
+        if (context.mounted) {
+          Navigator.pop(context);
+          _showSnackBar('Failed to send image message', Colors.red);
+        }
       }
 
       return true;
     } catch (e) {
-      Navigator.pop(context);
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
       return false;
     }
   }
@@ -126,9 +151,11 @@ class ImageMessagesHandler {
   }
 
   void _showSnackBar(String message, Color backgroundColor) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: backgroundColor),
-    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: backgroundColor),
+      );
+    }
   }
 }
 
@@ -155,12 +182,14 @@ class ImageInputButtons extends ConsumerWidget {
             );
             final success = await handler.pickAndSendImage(ImageSource.gallery);
             if (!success) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to upload image'),
-                  backgroundColor: Colors.red,
-                ),
-              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Failed to upload image'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             }
           },
         ),
@@ -177,12 +206,14 @@ class ImageInputButtons extends ConsumerWidget {
             );
             final success = await handler.pickAndSendImage(ImageSource.camera);
             if (!success) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to upload image'),
-                  backgroundColor: Colors.red,
-                ),
-              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Failed to upload image'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             }
           },
         ),

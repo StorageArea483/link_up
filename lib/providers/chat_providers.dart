@@ -14,7 +14,13 @@ final isLoadingStateProvider = StateProvider<bool>((ref) => true);
 final isLoadingChatScreenProvider = StateProvider<bool>((ref) => true);
 
 // Messages list provider
-final messagesProvider = StateProvider<List<Message>>((ref) => []);
+final messagesProvider = StateProvider.family<List<Message>, String>((
+  ref,
+  chatId,
+) {
+  ref.keepAlive();
+  return [];
+});
 
 // Typing indicator provider
 final isTypingProvider = StateProvider<bool>((ref) => false);
@@ -29,14 +35,40 @@ final currentUserIdProvider = StateProvider<String?>((ref) => null);
 final chatIdProvider = StateProvider<String?>((ref) => null);
 
 // Local File provider (Family: imageId) - Each image has its own file state
-final localFileProvider = StateProvider.family<File?, String>(
-  (ref, imageId) => null,
-);
+// Using keepAlive to prevent state from being disposed when widget is removed
+final localFileProvider = StateProvider.family<File?, (String, String?)>((
+  ref,
+  params,
+) {
+  ref.keepAlive();
+  return null;
+});
 
 // Loading state provider (Family: imageId) - Each image has its own loading state
-final imageLoadingStateProvider = StateProvider.family<bool, String>(
-  (ref, imageId) => true,
+final imageLoadingStateProvider = StateProvider.family<bool, (String, String?)>(
+  (ref, params) {
+    ref.keepAlive();
+    return true;
+  },
 );
+
+// Local Audio File provider (Family: audioId) - Each audio has its own file state
+final localAudioFileProvider = StateProvider.family<File?, String>((
+  ref,
+  audioId,
+) {
+  ref.keepAlive();
+  return null;
+});
+
+// Audio Loading state provider (Family: audioId) - Each audio has its own loading state
+final audioLoadingStateProvider = StateProvider.family<bool, String>((
+  ref,
+  audioId,
+) {
+  ref.keepAlive();
+  return true;
+});
 
 final toggleRecordingProvider = StateProvider<bool>((ref) => false);
 
@@ -72,11 +104,6 @@ final unreadCountProvider = FutureProvider.family<int, String>((
         currentUserId, // Current user is the receiver for unread messages
   );
 });
-
-// Cached messages provider (Family: chatId) - Stores messages in memory per chat
-final cachedMessagesProvider = StateProvider.family<List<Message>, String>(
-  (ref, chatId) => [],
-);
 
 // Last message provider (Family: contactId) - Fetches from SQLite
 final lastMessageProvider = FutureProvider.family<String, String>((

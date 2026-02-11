@@ -115,7 +115,7 @@ class SqfliteMsgsClear {
       }
       // Only update UI if context is still mounted
       if (!_isMounted) return;
-      ref.read(messagesProvider.notifier).state = [];
+      ref.read(messagesProvider(chatId!).notifier).state = [];
 
       // Also invalidate the last message provider for this contact
       if (contactUid != null) {

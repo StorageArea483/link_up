@@ -8,8 +8,9 @@ import 'package:path_provider/path_provider.dart';
 
 class ImageBubble extends ConsumerStatefulWidget {
   final String imageId;
+  final String? chatId;
 
-  const ImageBubble({super.key, required this.imageId});
+  const ImageBubble({super.key, required this.imageId, required this.chatId});
 
   @override
   ConsumerState<ImageBubble> createState() => _ImageBubbleState();
@@ -22,27 +23,65 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
     _checkLocalFile();
   }
 
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   Future<void> _checkLocalFile() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final file = File(
-        '${dir.path}/LinkUp storage/Images/${widget.imageId}.jpg',
-      );
-      if (await file.exists()) {
+      final filePath =
+          '${dir.path}/LinkUp storage/Images/${widget.imageId}.jpg';
+      final file = File(filePath);
+
+      final exists = await file.exists();
+
+      if (exists) {
         if (mounted) {
-          ref.read(localFileProvider(widget.imageId).notifier).state = file;
-          ref.read(imageLoadingStateProvider(widget.imageId).notifier).state =
+          ref
+                  .read(
+                    localFileProvider((
+                      widget.imageId,
+                      widget.chatId!,
+                    )).notifier,
+                  )
+                  .state =
+              file;
+
+          ref
+                  .read(
+                    imageLoadingStateProvider((
+                      widget.imageId,
+                      widget.chatId,
+                    )).notifier,
+                  )
+                  .state =
               false;
         }
       } else {
         if (mounted) {
-          ref.read(imageLoadingStateProvider(widget.imageId).notifier).state =
+          ref
+                  .read(
+                    imageLoadingStateProvider((
+                      widget.imageId,
+                      widget.chatId,
+                    )).notifier,
+                  )
+                  .state =
               false;
         }
       }
     } catch (e) {
       if (mounted) {
-        ref.read(imageLoadingStateProvider(widget.imageId).notifier).state =
+        ref
+                .read(
+                  imageLoadingStateProvider((
+                    widget.imageId,
+                    widget.chatId,
+                  )).notifier,
+                )
+                .state =
             false;
       }
     }
@@ -53,8 +92,12 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = ref.watch(imageLoadingStateProvider(widget.imageId));
-    final localFile = ref.watch(localFileProvider(widget.imageId));
+    final isLoading = ref.watch(
+      imageLoadingStateProvider((widget.imageId, widget.chatId)),
+    );
+    final localFile = ref.watch(
+      localFileProvider((widget.imageId, widget.chatId!)),
+    );
 
     if (isLoading) {
       return Container(
@@ -89,7 +132,9 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
               width: 250,
               fit: BoxFit.cover,
               loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
+                if (loadingProgress == null) {
+                  return child;
+                }
                 return Container(
                   width: 250,
                   height: 150,

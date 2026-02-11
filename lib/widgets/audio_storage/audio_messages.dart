@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/styles/styles.dart';
+import 'package:link_up/database/sqflite_helper.dart';
 
 class AudioMessagesHandler {
   final WidgetRef ref;
@@ -37,9 +38,11 @@ class AudioMessagesHandler {
       try {
         if (state.processingState == ProcessingState.completed) {
           _isAudioCompleted = true;
-          ref.read(isPlayingPreviewProvider.notifier).state = false;
-          // Reset position to beginning when audio completes
-          ref.read(positionProvider.notifier).state = Duration.zero;
+          if (context.mounted) {
+            ref.read(isPlayingPreviewProvider.notifier).state = false;
+            // Reset position to beginning when audio completes
+            ref.read(positionProvider.notifier).state = Duration.zero;
+          }
         } else if (state.processingState == ProcessingState.ready &&
             state.playing) {
           // Reset the completed flag when audio starts playing again
@@ -60,7 +63,9 @@ class AudioMessagesHandler {
 
         final path = await _getUniqueRecordingPath(userId: userId);
         if (path.isEmpty) {
-          _showSnackBar('Failed to create recording path', Colors.red);
+          if (context.mounted) {
+            _showSnackBar('Failed to create recording path', Colors.red);
+          }
           return;
         }
 
@@ -68,25 +73,30 @@ class AudioMessagesHandler {
           const RecordConfig(encoder: AudioEncoder.aacLc),
           path: path,
         );
-        ref.read(toggleRecordingProvider.notifier).state = true;
+        if (context.mounted) {
+          ref.read(toggleRecordingProvider.notifier).state = true;
+        }
       } else {
-        _showSnackBar('Microphone permission denied', Colors.red);
+        if (context.mounted) {
+          _showSnackBar('Microphone permission denied', Colors.red);
+        }
       }
     } catch (e) {
-      ref.read(toggleRecordingProvider.notifier).state = false;
-      _showSnackBar('Audio recording failed}', Colors.red);
+      if (context.mounted) {
+        ref.read(toggleRecordingProvider.notifier).state = false;
+        _showSnackBar('Audio recording failed', Colors.red);
+      }
     }
   }
 
   Future<void> stopRecording() async {
     try {
       if (!context.mounted) return;
-      final networkOnlineAsync = ref.read(networkConnectivityProvider);
-      if (!context.mounted) return;
       final currentUserId = ref.read(currentUserIdProvider);
       if (!context.mounted) return;
       final chatId = ref.read(chatIdProvider);
       final recordedPath = await record.stop();
+      if (!context.mounted) return;
       ref.read(toggleRecordingProvider.notifier).state = false;
 
       if (chatId == null || currentUserId == null) return;
@@ -99,93 +109,170 @@ class AudioMessagesHandler {
 
           if (fileSize > 1000) {
             // At least 1KB for a meaningful recording
-            ref.read(recordingPathProvider.notifier).state = recordedPath;
-            final hasInternet = networkOnlineAsync.value ?? true;
-            if (!hasInternet) {
-              _showSnackBar('No internet connection', Colors.red);
-              return;
-            }
-            try {
-              // Show uploading indicator
-              _showUploadingDialog();
-              final file = await storage.createFile(
-                bucketId: bucketId,
-                fileId: ID.unique(),
-                file: InputFile.fromPath(path: recordedPath),
-              );
-
-              // Send message with audioId and audioPath
-              final messageDoc = await ChatService.sendMessage(
-                chatId: chatId,
-                senderId: currentUserId,
-                receiverId: contact.uid,
-                text: 'Audio',
-                audioId: file.$id,
-                audioPath: recordedPath,
-              );
-
-              if (messageDoc != null) {
-                final newMessage = Message.fromJson(messageDoc.data);
-                final currentMessages = ref.read(messagesProvider);
-
-                ref.read(messagesProvider.notifier).state = [
-                  newMessage,
-                  ...currentMessages,
-                ];
-
-                Navigator.pop(context); // Close uploading dialog
-                _showSnackBar('Audio uploaded successfully', Colors.green);
-
-                try {
-                  ref.invalidate(lastMessageProvider(contact.uid));
-                } catch (e) {
-                  // Handle invalidation error silently
-                }
-              } else {
-                Navigator.pop(context);
-                _showSnackBar('Failed to send audio', Colors.red);
-              }
-            } catch (e) {
-              Navigator.pop(context);
-              return;
+            if (context.mounted) {
+              ref.read(recordingPathProvider.notifier).state = recordedPath;
             }
           } else {
-            _showSnackBar('Recording is too short or empty', Colors.orange);
-            // Still save it for testing purposes
-            ref.read(recordingPathProvider.notifier).state = recordedPath;
+            if (context.mounted) {
+              _showSnackBar('Recording is too short or empty', Colors.orange);
+              // Still save it for testing purposes
+              ref.read(recordingPathProvider.notifier).state = recordedPath;
+            }
           }
         } else {
-          _showSnackBar('Recording file not found', Colors.red);
+          if (context.mounted) {
+            _showSnackBar('Recording file not found', Colors.red);
+          }
         }
       } else {
-        _showSnackBar('Recording failed to save', Colors.red);
+        if (context.mounted) {
+          _showSnackBar('Recording failed to save', Colors.red);
+        }
       }
     } catch (e) {
-      ref.read(toggleRecordingProvider.notifier).state = false;
-      _showSnackBar('Audio recording failed', Colors.red);
+      if (context.mounted) {
+        ref.read(toggleRecordingProvider.notifier).state = false;
+        _showSnackBar('Audio recording failed', Colors.red);
+      }
+    }
+  }
+
+  Future<bool> sendAudioMessage() async {
+    if (!context.mounted) return false;
+    final recordingPath = ref.read(
+      recordingPathProvider,
+    ); // local path where file is actually present
+    if (recordingPath == null) return false;
+
+    if (!context.mounted) return false;
+    final currentUserId = ref.read(currentUserIdProvider);
+    if (!context.mounted) return false;
+    final chatId = ref.read(chatIdProvider);
+
+    if (currentUserId == null || chatId == null) return false;
+
+    // Check internet connection
+    if (!context.mounted) return false;
+    final networkOnlineAsync = ref.read(networkConnectivityProvider);
+    final hasInternet = networkOnlineAsync.value ?? true;
+    if (!hasInternet) {
+      if (context.mounted) {
+        _showSnackBar('No internet connection', Colors.red);
+      }
+      return false;
+    }
+
+    try {
+      // Show uploading indicator
+      if (context.mounted) {
+        _showUploadingDialog();
+      }
+
+      final file = await storage.createFile(
+        bucketId: bucketId,
+        fileId: ID.unique(),
+        file: InputFile.fromPath(path: recordingPath),
+      );
+
+      // Save locally for the sender as well
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        final storageDir = io.Directory('${dir.path}/LinkUp storage/Audio');
+        if (!await storageDir.exists()) {
+          await storageDir.create(recursive: true);
+        }
+        final savePath = '${storageDir.path}/${file.$id}.m4a';
+
+        // Only save if file doesn't already exist
+        if (!await io.File(savePath).exists()) {
+          await io.File(recordingPath).copy(savePath);
+        }
+      } catch (e) {
+        // Ignore local save error, upload succeeded
+      }
+
+      // Send message with audioId only
+      final messageDoc = await ChatService.sendMessage(
+        chatId: chatId,
+        senderId: currentUserId,
+        receiverId: contact.uid,
+        text: 'Audio',
+        audioId: file.$id,
+      );
+
+      if (messageDoc != null) {
+        final newMessage = Message.fromJson(messageDoc.data);
+        if (!context.mounted) return false;
+        final currentMessages = ref.read(messagesProvider(chatId));
+
+        if (!context.mounted) return false;
+        ref.read(messagesProvider(chatId).notifier).state = [
+          newMessage,
+          ...currentMessages,
+        ];
+
+        // NEW: Save the sent message to SQLite immediately
+        await SqfliteHelper.insertMessage(newMessage);
+
+        if (context.mounted) {
+          Navigator.pop(context); // Close uploading dialog
+          _showSnackBar('Audio sent successfully', Colors.green);
+        }
+
+        // Clean up the recording
+        await deleteRecording();
+
+        try {
+          if (context.mounted) {
+            ref.invalidate(lastMessageProvider(contact.uid));
+          }
+        } catch (e) {
+          // Handle invalidation error silently
+        }
+      } else {
+        if (context.mounted) {
+          Navigator.pop(context);
+          _showSnackBar('Failed to send audio message', Colors.red);
+        }
+      }
+
+      return true;
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        _showSnackBar('Failed to send audio', Colors.red);
+      }
+      return false;
     }
   }
 
   Future<void> handlePlayPause() async {
+    if (!context.mounted) return;
     final recordingPath = ref.read(recordingPathProvider);
     if (recordingPath == null) return;
 
     try {
       if (player.playing) {
-        ref.read(isPlayingPreviewProvider.notifier).state = false;
+        if (context.mounted) {
+          ref.read(isPlayingPreviewProvider.notifier).state = false;
+        }
         await player.pause();
       } else {
         // Verify file exists before trying to play
         final file = io.File(recordingPath);
         if (!await file.exists()) {
-          _showSnackBar('Audio file not found', Colors.red);
+          if (context.mounted) {
+            _showSnackBar('Audio file not found', Colors.red);
+          }
           return;
         }
 
         // Check file size to ensure it has content
         final fileSize = await file.length();
         if (fileSize == 0) {
-          _showSnackBar('Audio file is empty', Colors.red);
+          if (context.mounted) {
+            _showSnackBar('Audio file is empty', Colors.red);
+          }
           return;
         }
 
@@ -193,17 +280,23 @@ class AudioMessagesHandler {
         try {
           await player.setFilePath(recordingPath);
         } catch (e) {
-          _showSnackBar('Failed to load audio file', Colors.red);
+          if (context.mounted) {
+            _showSnackBar('Failed to load audio file', Colors.red);
+          }
           return;
         }
         // Reset the completed flag when starting playback
         _isAudioCompleted = false;
-        ref.read(isPlayingPreviewProvider.notifier).state = true;
+        if (context.mounted) {
+          ref.read(isPlayingPreviewProvider.notifier).state = true;
+        }
         await player.play();
       }
     } catch (e) {
-      ref.read(isPlayingPreviewProvider.notifier).state = false;
-      _showSnackBar('Failed to play audio', Colors.red);
+      if (context.mounted) {
+        ref.read(isPlayingPreviewProvider.notifier).state = false;
+        _showSnackBar('Failed to play audio', Colors.red);
+      }
     }
   }
 
@@ -213,11 +306,14 @@ class AudioMessagesHandler {
       _isAudioCompleted = false;
       await player.seek(Duration(seconds: value.toInt()));
     } catch (e) {
-      _showSnackBar('Failed to seek audio', Colors.red);
+      if (context.mounted) {
+        _showSnackBar('Failed to seek audio', Colors.red);
+      }
     }
   }
 
   Future<void> deleteRecording() async {
+    if (!context.mounted) return;
     final path = ref.read(recordingPathProvider);
     if (path != null) {
       try {
@@ -240,10 +336,12 @@ class AudioMessagesHandler {
 
     // Reset all states
     _isAudioCompleted = false; // Reset the completed flag
-    ref.read(recordingPathProvider.notifier).state = null;
-    ref.read(isPlayingPreviewProvider.notifier).state = false;
-    ref.read(positionProvider.notifier).state = Duration.zero;
-    ref.read(durationProvider.notifier).state = Duration.zero;
+    if (context.mounted) {
+      ref.read(recordingPathProvider.notifier).state = null;
+      ref.read(isPlayingPreviewProvider.notifier).state = false;
+      ref.read(positionProvider.notifier).state = Duration.zero;
+      ref.read(durationProvider.notifier).state = Duration.zero;
+    }
   }
 
   String formatDuration(Duration d) {
@@ -268,7 +366,7 @@ class AudioMessagesHandler {
     try {
       final dir = await getApplicationDocumentsDirectory();
 
-      final voiceDir = io.Directory('${dir.path}/voice_messages');
+      final voiceDir = io.Directory('${dir.path}/LinkUp storage/Audios');
       if (!await voiceDir.exists()) {
         await voiceDir.create(recursive: true);
       }
@@ -282,9 +380,11 @@ class AudioMessagesHandler {
   }
 
   void _showSnackBar(String message, Color backgroundColor) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: backgroundColor),
-    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: backgroundColor),
+      );
+    }
   }
 
   // Method to dispose resources
@@ -294,10 +394,12 @@ class AudioMessagesHandler {
         await player.stop();
       }
       // Reset providers to safe values before disposing
-      ref.read(recordingPathProvider.notifier).state = null;
-      ref.read(isPlayingPreviewProvider.notifier).state = false;
-      ref.read(positionProvider.notifier).state = Duration.zero;
-      ref.read(durationProvider.notifier).state = Duration.zero;
+      if (context.mounted) {
+        ref.read(recordingPathProvider.notifier).state = null;
+        ref.read(isPlayingPreviewProvider.notifier).state = false;
+        ref.read(positionProvider.notifier).state = Duration.zero;
+        ref.read(durationProvider.notifier).state = Duration.zero;
+      }
 
       await player.dispose();
     } catch (e) {}

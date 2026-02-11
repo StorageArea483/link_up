@@ -14,13 +14,9 @@ final isLoadingStateProvider = StateProvider<bool>((ref) => true);
 final isLoadingChatScreenProvider = StateProvider<bool>((ref) => true);
 
 // Messages list provider
-final messagesProvider = StateProvider.family<List<Message>, String>((
-  ref,
-  chatId,
-) {
-  ref.keepAlive();
-  return [];
-});
+final messagesProvider = StateProvider.family<List<Message>, String>(
+  (ref, chatId) => [],
+);
 
 // Typing indicator provider
 final isTypingProvider = StateProvider<bool>((ref) => false);
@@ -36,37 +32,23 @@ final chatIdProvider = StateProvider<String?>((ref) => null);
 
 // Local File provider (Family: imageId) - Each image has its own file state
 // Using keepAlive to prevent state from being disposed when widget is removed
-final localFileProvider = StateProvider.family<File?, (String, String?)>((
-  ref,
-  params,
-) {
-  ref.keepAlive();
-  return null;
-});
+final localFileProvider = StateProvider.family<File?, (String, String?)>(
+  (ref, params) => null,
+);
 
 // Loading state provider (Family: imageId) - Each image has its own loading state
 final imageLoadingStateProvider = StateProvider.family<bool, (String, String?)>(
-  (ref, params) {
-    ref.keepAlive();
-    return true;
-  },
+  (ref, params) => true,
 );
 
 // Local Audio File provider (Family: audioId) - Each audio has its own file state
-final localAudioFileProvider = StateProvider.family<File?, (String, String?)>((
-  ref,
-  params,
-) {
-  ref.keepAlive();
-  return null;
-});
+final localAudioFileProvider = StateProvider.family<File?, (String, String?)>(
+  (ref, params) => null,
+);
 
 // Audio Loading state provider (Family: audioId) - Each audio has its own loading state
 final audioLoadingStateProvider = StateProvider.family<bool, (String, String?)>(
-  (ref, params) {
-    ref.keepAlive();
-    return true;
-  },
+  (ref, params) => true,
 );
 
 final toggleRecordingProvider = StateProvider<bool>((ref) => false);

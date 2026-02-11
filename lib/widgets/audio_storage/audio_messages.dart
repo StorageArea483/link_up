@@ -48,9 +48,7 @@ class AudioMessagesHandler {
           // Reset the completed flag when audio starts playing again
           _isAudioCompleted = false;
         }
-      } catch (e) {
-        // Handle error silently
-      }
+      } catch (e) {}
     });
   }
 
@@ -201,6 +199,7 @@ class AudioMessagesHandler {
       }
 
       final fileSize = await recordingFile.length();
+
       if (fileSize == 0) {
         if (context.mounted) {
           Navigator.pop(context);
@@ -208,6 +207,7 @@ class AudioMessagesHandler {
         }
         return false;
       }
+
       final file = await storage.createFile(
         bucketId: bucketId,
         fileId: ID.unique(),
@@ -222,6 +222,7 @@ class AudioMessagesHandler {
           await storageDir.create(recursive: true);
         }
         final savePath = '${storageDir.path}/${file.$id}.m4a';
+
         // Only save if file doesn't already exist
         if (!await io.File(savePath).exists()) {
           await io.File(recordingPath).copy(savePath);
@@ -229,6 +230,8 @@ class AudioMessagesHandler {
       } catch (e) {
         // Ignore local save error, upload succeeded
       }
+
+      // Send message with audioId only
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
@@ -244,19 +247,24 @@ class AudioMessagesHandler {
         }
 
         final currentMessages = ref.read(messagesProvider(chatId));
+
         if (!context.mounted) return false;
         ref.read(messagesProvider(chatId).notifier).state = [
           newMessage,
           ...currentMessages,
         ];
+
         // NEW: Save the sent message to SQLite immediately
         await SqfliteHelper.insertMessage(newMessage);
+
         if (context.mounted) {
           Navigator.pop(context); // Close uploading dialog
           _showSnackBar('Audio sent successfully', Colors.green);
         }
+
         // Clean up the recording
         await deleteRecording();
+
         try {
           if (context.mounted) {
             ref.invalidate(lastMessageProvider(contact.uid));
@@ -270,6 +278,7 @@ class AudioMessagesHandler {
           _showSnackBar('Failed to send audio message', Colors.red);
         }
       }
+
       return true;
     } catch (e) {
       if (context.mounted) {

@@ -38,7 +38,7 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
       if (mounted) {
         ref
                 .read(
-                  imageLoadingStateProvider((
+                  audioLoadingStateProvider((
                     widget.audioId,
                     widget.chatId,
                   )).notifier,
@@ -48,11 +48,14 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
       }
       return;
     }
+
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File(
         '${dir.path}/LinkUp storage/Audio/${widget.audioId}.m4a',
       );
+
+      // Check once - if file exists, update provider
       if (await file.exists()) {
         if (mounted) {
           ref
@@ -73,12 +76,10 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
                   )
                   .state =
               false;
-        }
-      } else {
-        if (mounted) {
+          // Reset error state if file exists
           ref
                   .read(
-                    audioLoadingStateProvider((
+                    audioErrorProvider((
                       widget.audioId,
                       widget.chatId,
                     )).notifier,
@@ -87,7 +88,10 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
               false;
         }
       }
+      // If file doesn't exist, keep loading state true
+      // _handleAudioDelivery will update providers when download completes
     } catch (e) {
+      // On error, stop loading and set error state
       if (mounted) {
         ref
                 .read(
@@ -98,6 +102,12 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
                 )
                 .state =
             false;
+        ref
+                .read(
+                  audioErrorProvider((widget.audioId, widget.chatId)).notifier,
+                )
+                .state =
+            true;
       }
     }
   }
@@ -110,7 +120,61 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
     final localFile = ref.watch(
       localAudioFileProvider((widget.audioId, widget.chatId)),
     );
+    final audioError = ref.watch(
+      audioErrorProvider((widget.audioId, widget.chatId)),
+    );
 
+    // Show error state with retry button
+    if (audioError) {
+      return Container(
+        width: 250,
+        height: 60,
+        decoration: BoxDecoration(
+          color: Colors.red[50],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red[200]!),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, color: Colors.red[700], size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Failed to load audio',
+              style: TextStyle(color: Colors.red[700], fontSize: 12),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: Icon(Icons.refresh, color: Colors.red[700], size: 20),
+              onPressed: () {
+                // Reset error state and trigger re-check
+                ref
+                        .read(
+                          audioErrorProvider((
+                            widget.audioId,
+                            widget.chatId,
+                          )).notifier,
+                        )
+                        .state =
+                    false;
+                ref
+                        .read(
+                          audioLoadingStateProvider((
+                            widget.audioId,
+                            widget.chatId,
+                          )).notifier,
+                        )
+                        .state =
+                    true;
+                _checkLocalFile();
+              },
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show loading state
     if (isLoading) {
       return Container(
         width: 250,
@@ -128,6 +192,7 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
       );
     }
 
+    // Show audio player if file exists
     if (localFile != null && localFile.existsSync()) {
       return VoiceMessageView(
         controller: VoiceController(
@@ -151,6 +216,8 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
         size: 35,
       );
     }
+
+    // Fallback: Show nothing (file doesn't exist and not loading/error)
     return const SizedBox.shrink();
   }
 }

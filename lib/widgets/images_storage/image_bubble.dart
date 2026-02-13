@@ -55,6 +55,8 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
 
       final file = File(filePath);
       final exists = await file.exists();
+
+      // Check once - if file exists, update provider
       if (exists) {
         if (mounted) {
           ref
@@ -77,20 +79,11 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
                   .state =
               false;
         }
-      } else {
-        if (mounted) {
-          ref
-                  .read(
-                    imageLoadingStateProvider((
-                      widget.imageId,
-                      widget.chatId,
-                    )).notifier,
-                  )
-                  .state =
-              false;
-        }
       }
+      // If file doesn't exist, keep loading state true
+      // _handleImageDelivery will update providers when download completes
     } catch (e) {
+      // On error, stop loading
       if (mounted) {
         ref
                 .read(
@@ -154,6 +147,7 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
               localFile,
               width: 250,
               fit: BoxFit.cover,
+              cacheWidth: 500,
               errorBuilder: (context, error, stackTrace) {
                 return _buildErrorWidget();
               },
@@ -162,6 +156,7 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
               _imageUrl,
               width: 250,
               fit: BoxFit.cover,
+              cacheWidth: 500,
               loadingBuilder: (context, child, loadingProgress) {
                 if (loadingProgress == null) {
                   return child;

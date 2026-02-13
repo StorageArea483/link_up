@@ -30,25 +30,42 @@ final currentUserIdProvider = StateProvider<String?>((ref) => null);
 // Chat ID provider
 final chatIdProvider = StateProvider<String?>((ref) => null);
 
-// Local File provider (Family: imageId) - Each image has its own file state
-// Using keepAlive to prevent state from being disposed when widget is removed
-final localFileProvider = StateProvider.family<File?, (String, String?)>(
-  (ref, params) => null,
+final audioErrorProvider = StateProvider.family<bool, (String, String?)>(
+  (ref, param) => false,
 );
+
+// Local File provider (Family: imageId) - Each image has its own file state
+final localFileProvider = StateProvider.family<File?, (String, String?)>((
+  ref,
+  params,
+) {
+  ref.keepAlive();
+  return null;
+});
 
 // Loading state provider (Family: imageId) - Each image has its own loading state
 final imageLoadingStateProvider = StateProvider.family<bool, (String, String?)>(
-  (ref, params) => true,
+  (ref, params) {
+    ref.keepAlive();
+    return true;
+  },
 );
 
 // Local Audio File provider (Family: audioId) - Each audio has its own file state
-final localAudioFileProvider = StateProvider.family<File?, (String, String?)>(
-  (ref, params) => null,
-);
+final localAudioFileProvider = StateProvider.family<File?, (String, String?)>((
+  ref,
+  params,
+) {
+  ref.keepAlive();
+  return null;
+});
 
 // Audio Loading state provider (Family: audioId) - Each audio has its own loading state
 final audioLoadingStateProvider = StateProvider.family<bool, (String, String?)>(
-  (ref, params) => true,
+  (ref, params) {
+    ref.keepAlive();
+    return true;
+  },
 );
 
 final toggleRecordingProvider = StateProvider<bool>((ref) => false);

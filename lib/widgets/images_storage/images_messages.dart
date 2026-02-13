@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:link_up/config/appwrite_client.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/models/user_contacts.dart';
@@ -26,6 +27,8 @@ class ImageMessagesHandler {
   });
 
   Future<bool> pickAndSendImage(ImageSource source) async {
+    XFile? compressedImage;
+
     final image = await ImagePicker().pickImage(source: source);
     if (image == null) {
       return false;
@@ -44,6 +47,7 @@ class ImageMessagesHandler {
     if (!context.mounted) return false;
     final networkOnlineAsync = ref.read(networkConnectivityProvider);
     final hasInternet = networkOnlineAsync.value ?? true;
+
     if (!hasInternet) {
       if (context.mounted) {
         _showSnackBar('No internet connection', Colors.red);
@@ -52,42 +56,70 @@ class ImageMessagesHandler {
     }
 
     try {
-      // Show uploading indicator
       if (context.mounted) {
         _showUploadingDialog();
       }
 
+      // Create temporary compressed image path
+      final tempDir = await getTemporaryDirectory();
+      final compressedImagePath =
+          '${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      // 🔥 Compress image
+      compressedImage = await FlutterImageCompress.compressAndGetFile(
+        image.path,
+        compressedImagePath,
+        quality: 70,
+        minWidth: 1024,
+        minHeight: 1024,
+      );
+
+      if (compressedImage == null) {
+        if (context.mounted) {
+          Navigator.pop(context);
+          _showSnackBar('Failed to compress image', Colors.red);
+        }
+        return false;
+      }
+
+      // 🔥 Upload compressed file
       final file = await storage.createFile(
         bucketId: bucketId,
         fileId: ID.unique(),
-        file: InputFile.fromPath(path: image.path),
+        file: InputFile.fromPath(path: compressedImage.path),
       );
 
-      // Save locally for the sender as well
+      // 🔥 Save compressed image locally
       try {
-        final dir = await getApplicationDocumentsDirectory();
-        final storageDir = io.Directory('${dir.path}/LinkUp storage/Images');
+        final appDir = await getApplicationDocumentsDirectory();
+        final storageDir = io.Directory('${appDir.path}/LinkUp storage/Images');
+
         if (!await storageDir.exists()) {
           await storageDir.create(recursive: true);
         }
+
         final savePath = '${storageDir.path}/${file.$id}.jpg';
 
-        // Only save if file doesn't already exist
         if (!await io.File(savePath).exists()) {
-          await io.File(image.path).copy(savePath);
+          await io.File(compressedImage.path).copy(savePath);
 
-          // Also save to gallery for sender (only if newly saved)
+          // Update providers with the local io.File
+          final localImageFile = io.File(savePath);
+          ref.read(localFileProvider((file.$id, chatId)).notifier).state =
+              localImageFile;
+          ref
+                  .read(imageLoadingStateProvider((file.$id, chatId)).notifier)
+                  .state =
+              false;
           try {
             await Gal.putImage(savePath, album: 'LinkUp');
-          } catch (e) {
-            // Ignore gallery save error
-          }
+          } catch (_) {}
         }
-      } catch (e) {
-        // Ignore local save error
+      } catch (_) {
+        // Ignore local save errors
       }
 
-      // Send message with imageId only (no imagePath since it's temporary)
+      // 🔥 Send message
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
@@ -98,43 +130,46 @@ class ImageMessagesHandler {
 
       if (messageDoc != null) {
         final newMessage = Message.fromJson(messageDoc.data);
+
         if (!context.mounted) return false;
         final currentMessages = ref.read(messagesProvider(chatId));
 
-        if (!context.mounted) return false;
         ref.read(messagesProvider(chatId).notifier).state = [
           newMessage,
           ...currentMessages,
         ];
 
-        // NEW: Save the sent message to SQLite immediately
         await SqfliteHelper.insertMessage(newMessage);
 
         if (context.mounted) {
-          Navigator.pop(context); // Close uploading dialog
+          Navigator.pop(context);
           _showSnackBar('Image uploaded successfully', Colors.green);
         }
 
-        try {
-          if (context.mounted) {
-            ref.invalidate(lastMessageProvider(contact.uid));
-          }
-        } catch (e) {
-          // Handle invalidation error silently
+        if (context.mounted) {
+          ref.invalidate(lastMessageProvider(contact.uid));
         }
+
+        return true;
       } else {
         if (context.mounted) {
           Navigator.pop(context);
           _showSnackBar('Failed to send image message', Colors.red);
         }
+        return false;
       }
-
-      return true;
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
       }
       return false;
+    } finally {
+      // 🔥 Guaranteed cleanup
+      if (compressedImage != null) {
+        try {
+          await io.File(compressedImage.path).delete();
+        } catch (_) {}
+      }
     }
   }
 

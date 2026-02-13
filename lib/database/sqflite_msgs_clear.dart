@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/database/sqflite_helper.dart';
+import 'package:link_up/models/message.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/providers/chat_providers.dart';
+import 'package:path_provider/path_provider.dart';
 
 class SqfliteMsgsClear {
   final String? chatId;
@@ -98,36 +101,50 @@ class SqfliteMsgsClear {
                 ),
               ),
               SizedBox(width: 12),
-              Text('Clearing messages...'),
+              Text('Clearing messages and media...'),
             ],
           ),
           backgroundColor: AppColors.primaryBlue,
-          duration: Duration(seconds: 2),
+          duration: Duration(seconds: 3),
         ),
       );
 
-      // Clear messages from local SQLite database
-      await SqfliteHelper.clearChatMessages(chatId!);
-      // Clear messages from Appwrite (sent status messages)
+      // 1. Get all messages to extract media IDs before deletion
+      final localMessages = await SqfliteHelper.getDeliveredMessages(chatId!);
       final sentMessages = await ChatService.getMessages(chatId!);
-      for (final doc in sentMessages.documents) {
-        await ChatService.deleteMessageFromAppwrite(doc.$id);
-      }
-      // Only update UI if context is still mounted
+
+      // 2. FIRST: Clear UI immediately to prevent widgets from trying to load deleted files
       if (!_isMounted) return;
       ref.read(messagesProvider(chatId!).notifier).state = [];
 
-      // Also invalidate the last message provider for this contact
+      // 3. Delete local media files (images and audio)
+      await _deleteLocalMediaFiles(localMessages, sentMessages);
+
+      // 4. Clear messages from local SQLite database
+      await SqfliteHelper.clearChatMessages(chatId!);
+
+      // 5. Clear messages from Appwrite (sent status messages)
+      for (final doc in sentMessages.documents) {
+        await ChatService.deleteMessageFromAppwrite(doc.$id);
+      }
+
+      // 6. Also invalidate the last message provider for this contact
       if (contactUid != null) {
         if (!_isMounted) return;
         ref.invalidate(lastMessageProvider(contactUid!));
       }
 
-      // Show success message only if context is still mounted
+      // 7. Show success message only if context is still mounted
       if (!_isMounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('All messages cleared successfully'),
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white, size: 20),
+              SizedBox(width: 12),
+              Text('All messages and media cleared successfully'),
+            ],
+          ),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 2),
         ),
@@ -136,12 +153,84 @@ class SqfliteMsgsClear {
       // Show error message only if context is still mounted
       if (!_isMounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to clear messages. Please try again.'),
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text('Failed to clear messages: ${e.toString()}'),
+              ),
+            ],
+          ),
           backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
+          duration: const Duration(seconds: 3),
         ),
       );
+    }
+  }
+
+  // Delete all local media files (images and audio) for this chat
+  Future<void> _deleteLocalMediaFiles(
+    List<Message> localMessages,
+    dynamic sentMessages,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final storageBasePath = '${dir.path}/LinkUp storage';
+
+      // Collect all media IDs from messages
+      final Set<String> imageIds = {};
+      final Set<String> audioIds = {};
+
+      // Extract IDs from local messages
+      for (Message message in localMessages) {
+        if (message.imageId != null) {
+          imageIds.add(message.imageId!);
+        }
+        if (message.audioId != null) {
+          audioIds.add(message.audioId!);
+        }
+      }
+
+      // Extract IDs from sent messages
+      for (final doc in sentMessages.documents) {
+        final data = doc.data;
+        if (data['imageId'] != null) {
+          imageIds.add(data['imageId']);
+        }
+        if (data['audioId'] != null) {
+          audioIds.add(data['audioId']);
+        }
+      }
+
+      // Delete image files
+      for (String imageId in imageIds) {
+        try {
+          final imagePath = '$storageBasePath/Images/$imageId.jpg';
+          final imageFile = File(imagePath);
+          if (await imageFile.exists()) {
+            await imageFile.delete();
+          }
+        } catch (e) {
+          // Continue with other files even if one fails
+        }
+      }
+
+      // Delete audio files
+      for (final audioId in audioIds) {
+        try {
+          final audioPath = '$storageBasePath/Audio/$audioId.m4a';
+          final audioFile = File(audioPath);
+          if (await audioFile.exists()) {
+            await audioFile.delete();
+          }
+        } catch (e) {
+          // Continue with other files even if one fails
+        }
+      }
+    } catch (e) {
+      // Don't throw - we still want to clear messages even if media deletion fails
     }
   }
 }

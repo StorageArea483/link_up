@@ -52,7 +52,8 @@ dependencies:
   path_provider: ^2.1.5
   just_audio: ^0.9.46
   gal: ^2.3.0
-  dio: ^5.9.1                                        
+  dio: ^5.9.1
+  flutter_image_compress: ^2.4.0                                        
 
 dev_dependencies:
   flutter_test:

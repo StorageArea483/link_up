@@ -440,10 +440,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
 
       final savePath = '${storageDir.path}/${message.imageId}.jpg';
+      final localImageFile = io.File(savePath);
 
       // Check if image already exists locally
-      if (await io.File(savePath).exists()) {
-        // Image already exists, just cleanup cloud storage (no need to save to gallery again)
+      if (await localImageFile.exists()) {
+        // Image already exists, update provider and cleanup cloud storage
+        if (mounted) {
+          ref
+                  .read(localFileProvider((message.imageId!, _chatId)).notifier)
+                  .state =
+              localImageFile;
+          ref
+                  .read(
+                    imageLoadingStateProvider((
+                      message.imageId!,
+                      _chatId,
+                    )).notifier,
+                  )
+                  .state =
+              false;
+        }
+
         try {
           // Delete image from Appwrite Storage
           await storage.deleteFile(
@@ -462,15 +479,46 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // 3. Download the image (only if it doesn't exist)
       await Dio().download(imageUrl, savePath);
 
-      // 4. Save downloaded image to device gallery (only once)
+      // 4. CRITICAL: Update provider after successful download
+      if (mounted) {
+        ref
+                .read(localFileProvider((message.imageId!, _chatId)).notifier)
+                .state =
+            localImageFile;
+        ref
+                .read(
+                  imageLoadingStateProvider((
+                    message.imageId!,
+                    _chatId,
+                  )).notifier,
+                )
+                .state =
+            false;
+      }
+
+      // 5. Save downloaded image to device gallery (only once)
       try {
         await Gal.putImage(savePath, album: 'LinkUp');
+
         // Delete image from Appwrite Storage
         await storage.deleteFile(bucketId: bucketId, fileId: message.imageId!);
         // Delete message document from Appwrite Database
         await ChatService.deleteMessageFromAppwrite(message.id);
       } catch (e) {}
-    } catch (e) {}
+    } catch (e) {
+      // Set loading to false even on error
+      if (mounted) {
+        ref
+                .read(
+                  imageLoadingStateProvider((
+                    message.imageId!,
+                    _chatId,
+                  )).notifier,
+                )
+                .state =
+            false;
+      }
+    }
   }
 
   Future<void> _handleAudioDelivery(Message message) async {
@@ -488,7 +536,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       // Check if audio already exists locally
       if (await io.File(savePath).exists()) {
-        // Audio already exists, just cleanup cloud storage
+        // Audio already exists, update provider and cleanup cloud storage
+        if (mounted) {
+          final audioFile = io.File(savePath);
+          ref
+                  .read(
+                    localAudioFileProvider((
+                      message.audioId!,
+                      _chatId,
+                    )).notifier,
+                  )
+                  .state =
+              audioFile;
+          ref
+                  .read(
+                    audioLoadingStateProvider((
+                      message.audioId!,
+                      _chatId,
+                    )).notifier,
+                  )
+                  .state =
+              false;
+          // Reset error state
+          ref
+                  .read(
+                    audioErrorProvider((message.audioId!, _chatId)).notifier,
+                  )
+                  .state =
+              false;
+        }
+
         try {
           // Delete audio from Appwrite Storage
           await storage.deleteFile(
@@ -508,7 +585,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // 3. Download the audio (only if it doesn't exist)
       await Dio().download(audioUrl, savePath);
 
-      // 4. Cleanup cloud storage after successful download
+      // 4. CRITICAL: Update provider after successful download
+      if (mounted) {
+        final audioFile = io.File(savePath);
+        ref
+                .read(
+                  localAudioFileProvider((message.audioId!, _chatId)).notifier,
+                )
+                .state =
+            audioFile;
+        ref
+                .read(
+                  audioLoadingStateProvider((
+                    message.audioId!,
+                    _chatId,
+                  )).notifier,
+                )
+                .state =
+            false;
+        // Reset error state on successful download
+        ref
+                .read(audioErrorProvider((message.audioId!, _chatId)).notifier)
+                .state =
+            false;
+      }
+
+      // 5. Cleanup cloud storage after successful download
       try {
         // Delete audio from Appwrite Storage
         await storage.deleteFile(bucketId: bucketId, fileId: message.audioId!);
@@ -516,7 +618,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         // Delete message document from Appwrite Database
         await ChatService.deleteMessageFromAppwrite(message.id);
       } catch (e) {}
-    } catch (e) {}
+    } catch (e) {
+      // Set loading to false and error to true on failure
+      if (mounted) {
+        ref
+                .read(
+                  audioLoadingStateProvider((
+                    message.audioId!,
+                    _chatId,
+                  )).notifier,
+                )
+                .state =
+            false;
+        ref
+                .read(audioErrorProvider((message.audioId!, _chatId)).notifier)
+                .state =
+            true;
+      }
+    }
   }
 
   // Mark a single specific message as delivered (for real-time auto-delivery)
@@ -1148,7 +1267,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: AudioBubble(
                   audioId: message.audioId!,
                   isSentByMe: isSentByMe,
-                  chatId: _chatId,
+                  chatId:
+                      _chatId ??
+                      (_currentUserId != null
+                          ? ChatService.generateChatId(
+                              _currentUserId!,
+                              widget.contact.uid,
+                            )
+                          : null),
                 ),
               ),
             if (message.text.isNotEmpty &&

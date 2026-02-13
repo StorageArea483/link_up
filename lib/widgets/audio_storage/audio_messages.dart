@@ -227,6 +227,17 @@ class AudioMessagesHandler {
         if (!await io.File(savePath).exists()) {
           await io.File(recordingPath).copy(savePath);
         }
+
+        // Update provider for sender's audio bubble
+        if (context.mounted) {
+          final audioFile = io.File(savePath);
+          ref.read(localAudioFileProvider((file.$id, chatId)).notifier).state =
+              audioFile;
+          ref
+                  .read(audioLoadingStateProvider((file.$id, chatId)).notifier)
+                  .state =
+              false;
+        }
       } catch (e) {
         // Ignore local save error, upload succeeded
       }
@@ -407,7 +418,7 @@ class AudioMessagesHandler {
 
   Future<String> _getUniqueRecordingPath({required String userId}) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await getTemporaryDirectory();
 
       final voiceDir = io.Directory('${dir.path}/LinkUp storage/Audios');
       if (!await voiceDir.exists()) {
@@ -499,7 +510,7 @@ class AudioPreviewWidget extends ConsumerWidget {
     if (recordingPath == null) {
       return const SizedBox.shrink();
     }
-
+    // Show normal audio preview
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

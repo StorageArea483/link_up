@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:developer' as developer;
 import 'package:appwrite/appwrite.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -273,7 +274,14 @@ class AudioMessagesHandler {
 
         // Send push notification when audio message status is "sent"
         if (newMessage.status == 'sent') {
+          developer.log(
+            '🎵 [AudioMessages] Audio message sent with status "sent", triggering push notification...',
+          );
           _sendPushNotificationToReceiver(newMessage);
+        } else {
+          developer.log(
+            '🎵 [AudioMessages] Audio message status is "${newMessage.status}", not sending push notification',
+          );
         }
 
         if (context.mounted) {
@@ -470,41 +478,100 @@ class AudioMessagesHandler {
   // Send push notification to receiver when audio message is sent
   Future<void> _sendPushNotificationToReceiver(Message message) async {
     try {
+      developer.log(
+        '🎵 [AudioMessages] ========== STARTING AUDIO PUSH NOTIFICATION PROCESS ==========',
+      );
+      developer.log('🎵 [AudioMessages] Message ID: ${message.id}');
+      developer.log('🎵 [AudioMessages] Message status: ${message.status}');
+      developer.log('🎵 [AudioMessages] Receiver ID: ${contact.uid}');
+      developer.log('🎵 [AudioMessages] Audio ID: ${message.audioId}');
+
       // Get receiver's FCM token from Firestore
+      developer.log(
+        '🎵 [AudioMessages] Step 1: Fetching receiver FCM token from Firestore...',
+      );
       final receiverDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(contact.uid)
           .get();
 
-      if (!receiverDoc.exists) return;
+      if (!receiverDoc.exists) {
+        developer.log(
+          '🎵 [AudioMessages] ERROR: Receiver document does not exist in Firestore',
+        );
+        return;
+      }
 
       final receiverData = receiverDoc.data();
-      final receiverToken = receiverData?['fcmToken'] as String?;
+      developer.log(
+        '🎵 [AudioMessages] Step 1: Receiver document data keys: ${receiverData?.keys.toList()}',
+      );
 
-      if (receiverToken == null || receiverToken.isEmpty) return;
+      final receiverToken = receiverData?['fcmToken'] as String?;
+      developer.log(
+        '🎵 [AudioMessages] Step 1: Receiver FCM token: ${receiverToken?.substring(0, 20)}...',
+      );
+
+      if (receiverToken == null || receiverToken.isEmpty) {
+        developer.log(
+          '🎵 [AudioMessages] ERROR: Receiver FCM token is null or empty',
+        );
+        return;
+      }
 
       // Get sender's name from Firestore
+      developer.log(
+        '🎵 [AudioMessages] Step 2: Fetching sender info from Firestore...',
+      );
       final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) return;
+      if (currentUser == null) {
+        developer.log('🎵 [AudioMessages] ERROR: Current user is null');
+        return;
+      }
+
+      developer.log(
+        '🎵 [AudioMessages] Step 2: Current user ID: ${currentUser.uid}',
+      );
 
       final senderDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser.uid)
           .get();
 
-      if (!senderDoc.exists) return;
+      if (!senderDoc.exists) {
+        developer.log(
+          '🎵 [AudioMessages] ERROR: Sender document does not exist in Firestore',
+        );
+        return;
+      }
 
       final senderData = senderDoc.data();
+      developer.log(
+        '🎵 [AudioMessages] Step 2: Sender document data keys: ${senderData?.keys.toList()}',
+      );
+
       final senderName = senderData?['name'] as String? ?? 'Someone';
+      developer.log('🎵 [AudioMessages] Step 2: Sender name: $senderName');
 
       // Send push notification
+      developer.log(
+        '🎵 [AudioMessages] Step 3: Calling NotificationService.sendPushNotification...',
+      );
       final notificationService = NotificationService();
       await notificationService.sendPushNotification(
         deviceToken: receiverToken,
         title: senderName,
         body: '🎵 Voice message',
       );
+
+      developer.log(
+        '🎵 [AudioMessages] ✅ SUCCESS: Audio push notification process completed successfully!',
+      );
     } catch (e) {
+      developer.log(
+        '🎵 [AudioMessages] ❌ ERROR in _sendPushNotificationToReceiver: $e',
+      );
+      developer.log('🎵 [AudioMessages] Error type: ${e.runtimeType}');
       // Silently handle errors - notification failure shouldn't break chat
     }
   }

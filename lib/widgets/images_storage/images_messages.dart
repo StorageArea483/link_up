@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:developer' as developer;
 import 'package:appwrite/appwrite.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -68,7 +69,6 @@ class ImageMessagesHandler {
       final compressedImagePath =
           '${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      // 🔥 Compress image
       compressedImage = await FlutterImageCompress.compressAndGetFile(
         image.path,
         compressedImagePath,
@@ -85,14 +85,12 @@ class ImageMessagesHandler {
         return false;
       }
 
-      // 🔥 Upload compressed file
       final file = await storage.createFile(
         bucketId: bucketId,
         fileId: ID.unique(),
         file: InputFile.fromPath(path: compressedImage.path),
       );
 
-      // 🔥 Save compressed image locally
       try {
         final appDir = await getApplicationDocumentsDirectory();
         final storageDir = io.Directory('${appDir.path}/LinkUp storage/Images');
@@ -146,7 +144,14 @@ class ImageMessagesHandler {
 
         // Send push notification when image message status is "sent"
         if (newMessage.status == 'sent') {
+          developer.log(
+            '📷 [ImageMessages] Image message sent with status "sent", triggering push notification...',
+          );
           _sendPushNotificationToReceiver(newMessage);
+        } else {
+          developer.log(
+            '📷 [ImageMessages] Image message status is "${newMessage.status}", not sending push notification',
+          );
         }
 
         if (context.mounted) {
@@ -204,41 +209,100 @@ class ImageMessagesHandler {
   // Send push notification to receiver when image message is sent
   Future<void> _sendPushNotificationToReceiver(Message message) async {
     try {
+      developer.log(
+        '📷 [ImageMessages] ========== STARTING IMAGE PUSH NOTIFICATION PROCESS ==========',
+      );
+      developer.log('📷 [ImageMessages] Message ID: ${message.id}');
+      developer.log('📷 [ImageMessages] Message status: ${message.status}');
+      developer.log('📷 [ImageMessages] Receiver ID: ${contact.uid}');
+      developer.log('📷 [ImageMessages] Image ID: ${message.imageId}');
+
       // Get receiver's FCM token from Firestore
+      developer.log(
+        '📷 [ImageMessages] Step 1: Fetching receiver FCM token from Firestore...',
+      );
       final receiverDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(contact.uid)
           .get();
 
-      if (!receiverDoc.exists) return;
+      if (!receiverDoc.exists) {
+        developer.log(
+          '📷 [ImageMessages] ERROR: Receiver document does not exist in Firestore',
+        );
+        return;
+      }
 
       final receiverData = receiverDoc.data();
-      final receiverToken = receiverData?['fcmToken'] as String?;
+      developer.log(
+        '📷 [ImageMessages] Step 1: Receiver document data keys: ${receiverData?.keys.toList()}',
+      );
 
-      if (receiverToken == null || receiverToken.isEmpty) return;
+      final receiverToken = receiverData?['fcmToken'] as String?;
+      developer.log(
+        '📷 [ImageMessages] Step 1: Receiver FCM token: ${receiverToken?.substring(0, 20)}...',
+      );
+
+      if (receiverToken == null || receiverToken.isEmpty) {
+        developer.log(
+          '📷 [ImageMessages] ERROR: Receiver FCM token is null or empty',
+        );
+        return;
+      }
 
       // Get sender's name from Firestore
+      developer.log(
+        '📷 [ImageMessages] Step 2: Fetching sender info from Firestore...',
+      );
       final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) return;
+      if (currentUser == null) {
+        developer.log('📷 [ImageMessages] ERROR: Current user is null');
+        return;
+      }
+
+      developer.log(
+        '📷 [ImageMessages] Step 2: Current user ID: ${currentUser.uid}',
+      );
 
       final senderDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser.uid)
           .get();
 
-      if (!senderDoc.exists) return;
+      if (!senderDoc.exists) {
+        developer.log(
+          '📷 [ImageMessages] ERROR: Sender document does not exist in Firestore',
+        );
+        return;
+      }
 
       final senderData = senderDoc.data();
+      developer.log(
+        '📷 [ImageMessages] Step 2: Sender document data keys: ${senderData?.keys.toList()}',
+      );
+
       final senderName = senderData?['name'] as String? ?? 'Someone';
+      developer.log('📷 [ImageMessages] Step 2: Sender name: $senderName');
 
       // Send push notification
+      developer.log(
+        '📷 [ImageMessages] Step 3: Calling NotificationService.sendPushNotification...',
+      );
       final notificationService = NotificationService();
       await notificationService.sendPushNotification(
         deviceToken: receiverToken,
         title: senderName,
         body: '📷 Photo',
       );
+
+      developer.log(
+        '📷 [ImageMessages] ✅ SUCCESS: Image push notification process completed successfully!',
+      );
     } catch (e) {
+      developer.log(
+        '📷 [ImageMessages] ❌ ERROR in _sendPushNotificationToReceiver: $e',
+      );
+      developer.log('📷 [ImageMessages] Error type: ${e.runtimeType}');
       // Silently handle errors - notification failure shouldn't break chat
     }
   }

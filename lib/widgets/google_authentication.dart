@@ -84,8 +84,10 @@ class _GoogleAuthenticationState extends ConsumerState<GoogleAuthentication> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Request not completed \n$e'),
+        const SnackBar(
+          content: Text(
+            'Unable to sign in. Please check your internet connection and try again.',
+          ),
           backgroundColor: Colors.red,
         ),
       );

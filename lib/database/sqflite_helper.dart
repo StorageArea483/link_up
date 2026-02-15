@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:link_up/models/message.dart';
@@ -23,46 +24,60 @@ class SqfliteHelper {
 
   /// Get database instance (singleton pattern)
   static Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+    try {
+      if (_database != null) return _database!;
+      _database = await _initDatabase();
+      return _database!;
+    } catch (e) {
+      log('Failed to initialize database: $e', name: 'SqfliteHelper');
+      rethrow;
+    }
   }
 
   /// Initialize the database
   static Future<Database> _initDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, _databaseName);
+    try {
+      final dbPath = await getDatabasesPath();
+      final path = join(dbPath, _databaseName);
 
-    return await openDatabase(
-      path,
-      version: _databaseVersion,
-      onCreate: _onCreate,
-    );
+      return await openDatabase(
+        path,
+        version: _databaseVersion,
+        onCreate: _onCreate,
+      );
+    } catch (e) {
+      log('Failed to initialize database: $e', name: 'SqfliteHelper');
+      rethrow;
+    }
   }
 
   /// Create the messages table
   /// Only stores delivered messages for offline viewing
   static Future<void> _onCreate(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE $tableMessages (
-        $columnId TEXT PRIMARY KEY,
-        $columnChatId TEXT NOT NULL,
-        $columnSenderId TEXT NOT NULL,
-        $columnReceiverId TEXT NOT NULL,
-        $columnText TEXT NOT NULL,
-        $columnImageId TEXT,
-        $columnAudioId TEXT,
-        $columnStatus TEXT NOT NULL,
-        $columnCreatedAt TEXT NOT NULL
-      )
-    ''');
+    try {
+      await db.execute('''
+        CREATE TABLE $tableMessages (
+          $columnId TEXT PRIMARY KEY,
+          $columnChatId TEXT NOT NULL,
+          $columnSenderId TEXT NOT NULL,
+          $columnReceiverId TEXT NOT NULL,
+          $columnText TEXT NOT NULL,
+          $columnImageId TEXT,
+          $columnAudioId TEXT,
+          $columnStatus TEXT NOT NULL,
+          $columnCreatedAt TEXT NOT NULL
+        )
+      ''');
+    } catch (e) {
+      log('Failed to create database table: $e', name: 'SqfliteHelper');
+      rethrow;
+    }
   }
 
   /// Insert or update a message in SQLite database
   static Future<bool> insertMessage(Message message) async {
-    final db = await database;
-
     try {
+      final db = await database;
       await db.insert(tableMessages, {
         columnId: message.id,
         columnChatId: message.chatId,
@@ -77,14 +92,14 @@ class SqfliteHelper {
 
       return true;
     } catch (e) {
+      log('Failed to insert message: $e', name: 'SqfliteHelper');
       return false;
     }
   }
 
   static Future<List<Message>> getLastMessage(String chatId) async {
-    final db = await database;
-
     try {
+      final db = await database;
       final List<Map<String, dynamic>> maps = await db.query(
         tableMessages,
         where: '$columnChatId = ?',
@@ -109,15 +124,14 @@ class SqfliteHelper {
         );
       }).toList();
     } catch (e) {
-      // Return empty list on error, don't throw
+      log('Failed to get last message: $e', name: 'SqfliteHelper');
       return [];
     }
   }
 
   static Future<List<Message>> getDeliveredMessages(String chatId) async {
-    final db = await database;
-
     try {
+      final db = await database;
       final List<Map<String, dynamic>> maps = await db.query(
         tableMessages,
         where: '$columnChatId = ?',
@@ -141,7 +155,7 @@ class SqfliteHelper {
         );
       }).toList();
     } catch (e) {
-      // Return empty list on error, don't throw
+      log('Failed to get delivered messages: $e', name: 'SqfliteHelper');
       return [];
     }
   }
@@ -154,9 +168,8 @@ class SqfliteHelper {
 
   /// Check if a message already exists in Sqflite
   static Future<bool> messageExists(String messageId) async {
-    final db = await database;
-
     try {
+      final db = await database;
       final result = await db.query(
         tableMessages,
         where: '$columnId = ?',
@@ -165,29 +178,33 @@ class SqfliteHelper {
       );
       return result.isNotEmpty;
     } catch (e) {
+      log('Failed to check message existence: $e', name: 'SqfliteHelper');
       return false;
     }
   }
 
   /// Clear all messages for a specific chat (optional utility)
   static Future<void> clearChatMessages(String chatId) async {
-    final db = await database;
-
     try {
+      final db = await database;
       await db.delete(
         tableMessages,
         where: '$columnChatId = ?',
         whereArgs: [chatId],
       );
     } catch (e) {
-      // Silent failure
+      log('Failed to clear chat messages: $e', name: 'SqfliteHelper');
     }
   }
 
   /// Close the database connection
   static Future<void> close() async {
-    final db = await database;
-    await db.close();
-    _database = null;
+    try {
+      final db = await database;
+      await db.close();
+      _database = null;
+    } catch (e) {
+      log('Failed to close database: $e', name: 'SqfliteHelper');
+    }
   }
 }

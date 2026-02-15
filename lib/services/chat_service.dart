@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart';
 import 'package:link_up/config/appwrite_client.dart';
@@ -46,6 +47,10 @@ class ChatService {
         data: data,
       );
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log('Database error in sendMessage: ${e.message}', name: 'ChatService');
+      }
       return null;
     }
   }
@@ -63,6 +68,13 @@ class ChatService {
       );
       return result;
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log(
+          'Database error in getLastMessage: ${e.message}',
+          name: 'ChatService',
+        );
+      }
       return DocumentList(total: 0, documents: []);
     }
   }
@@ -80,6 +92,10 @@ class ChatService {
       );
       return result;
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log('Database error in getMessages: ${e.message}', name: 'ChatService');
+      }
       return DocumentList(total: 0, documents: []);
     }
   }
@@ -100,12 +116,19 @@ class ChatService {
                 if (response.payload['chatId'] == chatId) {
                   callback(response);
                 }
-              } catch (e) {}
+              } catch (e) {
+                // Silently handle payload parsing errors to prevent stream interruption
+              }
             },
-            onError: (error) {},
+            onError: (error) {
+              // Log realtime connection errors for debugging
+              log('Message subscription error: $error', name: 'ChatService');
+            },
             cancelOnError: false,
           );
     } catch (e) {
+      // Log realtime subscription setup errors
+      log('Failed to setup message subscription: $e', name: 'ChatService');
       return null;
     }
   }
@@ -127,12 +150,19 @@ class ChatService {
                   // checking presence for reciever
                   callback(response);
                 }
-              } catch (e) {}
+              } catch (e) {
+                // Silently handle payload parsing errors to prevent stream interruption
+              }
             },
-            onError: (error) {},
+            onError: (error) {
+              // Log realtime connection errors for debugging
+              log('Presence subscription error: $error', name: 'ChatService');
+            },
             cancelOnError: false,
           );
     } catch (e) {
+      // Log realtime subscription setup errors
+      log('Failed to setup presence subscription: $e', name: 'ChatService');
       return null;
     }
   }
@@ -154,12 +184,25 @@ class ChatService {
                 if (response.payload['status'] == 'sent') {
                   callback(response);
                 }
-              } catch (e) {}
+              } catch (e) {
+                // Silently handle payload parsing errors to prevent stream interruption
+              }
             },
-            onError: (error) {},
+            onError: (error) {
+              // Log realtime connection errors for debugging
+              log(
+                'Realtime messages subscription error: $error',
+                name: 'ChatService',
+              );
+            },
             cancelOnError: false,
           );
     } catch (e) {
+      // Log realtime subscription setup errors
+      log(
+        'Failed to setup realtime messages subscription: $e',
+        name: 'ChatService',
+      );
       return null;
     }
   }
@@ -197,6 +240,13 @@ class ChatService {
 
       return updatedMessages;
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log(
+          'Database error in markMessagesAsDelivered: ${e.message}',
+          name: 'ChatService',
+        );
+      }
       return [];
     }
   }
@@ -210,6 +260,13 @@ class ChatService {
       );
       return true;
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log(
+          'Database error in deleteMessageFromAppwrite: ${e.message}',
+          name: 'ChatService',
+        );
+      }
       return false;
     }
   }
@@ -226,6 +283,13 @@ class ChatService {
         data: {'status': status},
       );
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log(
+          'Database error in updateMessageStatus: ${e.message}',
+          name: 'ChatService',
+        );
+      }
       return null;
     }
   }
@@ -259,6 +323,10 @@ class ChatService {
       }
       return true;
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log('Database error in setTyping: ${e.message}', name: 'ChatService');
+      }
       return false;
     }
   }
@@ -276,12 +344,19 @@ class ChatService {
                 if (response.payload['chatId'] == chatId) {
                   callback(response);
                 }
-              } catch (e) {}
+              } catch (e) {
+                // Silently handle payload parsing errors to prevent stream interruption
+              }
             },
-            onError: (error) {},
+            onError: (error) {
+              // Log realtime connection errors for debugging
+              log('Typing subscription error: $error', name: 'ChatService');
+            },
             cancelOnError: false,
           );
     } catch (e) {
+      // Log realtime subscription setup errors
+      log('Failed to setup typing subscription: $e', name: 'ChatService');
       return null;
     }
   }
@@ -316,6 +391,13 @@ class ChatService {
       }
       return true;
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log(
+          'Database error in updatePresence: ${e.message}',
+          name: 'ChatService',
+        );
+      }
       return false;
     }
   }
@@ -329,6 +411,13 @@ class ChatService {
       );
       return docs.documents.isNotEmpty ? docs.documents.first : null;
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log(
+          'Database error in getUserPresence: ${e.message}',
+          name: 'ChatService',
+        );
+      }
       return null;
     }
   }
@@ -352,6 +441,13 @@ class ChatService {
       }
       return result.total;
     } catch (e) {
+      // Log critical database errors for debugging
+      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+        log(
+          'Database error in getUnreadCount: ${e.message}',
+          name: 'ChatService',
+        );
+      }
       return 0;
     }
   }

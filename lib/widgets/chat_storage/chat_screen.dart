@@ -1,5 +1,5 @@
+import 'dart:developer';
 import 'dart:io' as io;
-import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -115,78 +115,108 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     typingSubscription?.cancel();
     presenceSubscription?.cancel();
 
-    if (_currentUserId != null && _chatId != null) {
-      ChatService.setTyping(
-        chatId: _chatId!,
-        userId: _currentUserId!,
-        isTyping: false,
-      );
+    try {
+      if (_currentUserId != null && _chatId != null) {
+        ChatService.setTyping(
+          chatId: _chatId!,
+          userId: _currentUserId!,
+          isTyping: false,
+        );
+      }
+    } catch (e) {
+      // Log typing cleanup error but don't prevent disposal
+      log('Failed to clear typing status on dispose: $e', name: 'ChatScreen');
     }
-    _record.dispose();
-    _audioHandler.dispose();
+
+    try {
+      _record.dispose();
+      _audioHandler.dispose();
+    } catch (e) {
+      // Log audio cleanup error but don't prevent disposal
+      log('Failed to dispose audio components: $e', name: 'ChatScreen');
+    }
+
     super.dispose();
   }
 
   Future<void> _initializeChat() async {
-    if (!mounted) return;
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    _currentUserId = userId;
+    try {
+      if (!mounted) return;
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      _currentUserId = userId;
 
-    if (!mounted) return;
-    ref.read(currentUserIdProvider.notifier).state = userId;
+      if (!mounted) return;
+      ref.read(currentUserIdProvider.notifier).state = userId;
 
-    if (userId == null) {
-      if (mounted) {
+      if (userId == null) {
+        if (mounted) {
+          ref.read(isLoadingChatScreenProvider.notifier).state = false;
+        }
+        return;
+      }
+
+      final chatId = ChatService.generateChatId(userId, widget.contact.uid);
+      _chatId = chatId;
+
+      if (!mounted) return;
+      ref.read(chatIdProvider.notifier).state = chatId;
+
+      // Check if we already have messages for this chat
+      final cachedMessages = ref.read(messagesProvider(chatId));
+      // Only show loading if we don't have cached messages
+      if (cachedMessages.isEmpty && mounted) {
+        ref.read(isLoadingChatScreenProvider.notifier).state = true;
+      } else {
+        if (!mounted) return;
         ref.read(isLoadingChatScreenProvider.notifier).state = false;
       }
-      return;
+
+      // Set current user as online
+      try {
+        await ChatService.updatePresence(userId: userId, online: true);
+      } catch (e) {
+        log('Failed to update user presence: $e', name: 'ChatScreen');
+        // Continue initialization even if presence update fails
+      }
+
+      // Load messages (will update cache if needed)
+      await _loadMessages();
+
+      // Set up subscriptions
+      _subscribeToMessages();
+      _subscribeToTyping();
+      _subscribeToPresence();
+
+      // Check contact's presence
+      await _checkUserPresence();
+
+      // Mark messages as delivered
+      await _markMessagesAsDeliveredAndUpdate(userId);
+    } catch (e) {
+      log('Chat initialization failed: $e', name: 'ChatScreen');
+      if (mounted) {
+        ref.read(isLoadingChatScreenProvider.notifier).state = false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to initialize chat. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
-
-    final chatId = ChatService.generateChatId(userId, widget.contact.uid);
-    _chatId = chatId;
-
-    if (!mounted) return;
-    ref.read(chatIdProvider.notifier).state = chatId;
-
-    // Check if we already have messages for this chat
-    final cachedMessages = ref.read(messagesProvider(chatId));
-    // Only show loading if we don't have cached messages
-    if (cachedMessages.isEmpty && mounted) {
-      ref.read(isLoadingChatScreenProvider.notifier).state = true;
-    } else {
-      if (!mounted) return;
-      ref.read(isLoadingChatScreenProvider.notifier).state = false;
-    }
-
-    // Set current user as online
-    await ChatService.updatePresence(userId: userId, online: true);
-
-    // Load messages (will update cache if needed)
-    await _loadMessages();
-
-    // Set up subscriptions
-    _subscribeToMessages();
-    _subscribeToTyping();
-    _subscribeToPresence();
-
-    // Check contact's presence
-    await _checkUserPresence();
-
-    // Mark messages as delivered
-    await _markMessagesAsDeliveredAndUpdate(userId);
   }
 
   Future<void> _markMessagesAsDeliveredAndUpdate(String userId) async {
-    // update the message status because receiver has come online
-    if (!mounted) return;
-    final chatId = ref.read(chatIdProvider);
-    if (chatId == null || !mounted) return;
-    if (!mounted) return;
-    ref.invalidate(unreadCountProvider(widget.contact.uid));
-    if (!mounted) return;
-    ref.invalidate(lastMessageProvider(widget.contact.uid));
-
     try {
+      // update the message status because receiver has come online
+      if (!mounted) return;
+      final chatId = ref.read(chatIdProvider);
+      if (chatId == null || !mounted) return;
+      if (!mounted) return;
+      ref.invalidate(unreadCountProvider(widget.contact.uid));
+      if (!mounted) return;
+      ref.invalidate(lastMessageProvider(widget.contact.uid));
+
       final updatedMessages = await ChatService.markMessagesAsDelivered(
         chatId: chatId,
         receiverId: userId, // receive messages meant for this user
@@ -220,36 +250,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
 
         // Sort by creation time (newest first) to maintain order
-
-        // Sort by creation time (newest first) to maintain order
         updatedMessagesList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         // Update the UI with the new message list
-        if (!mounted) return;
-        ref.read(messagesProvider(chatId).notifier).state = updatedMessagesList;
         if (!mounted) return;
         ref.read(messagesProvider(chatId).notifier).state = updatedMessagesList;
       } else if (mounted) {
         // No new delivered messages, but ensure we have offline messages loaded
         final currentMessages = ref.read(messagesProvider(chatId));
         if (currentMessages.isEmpty) {
-          final offlineMessages = await SqfliteHelper.getDeliveredMessages(
-            chatId,
-          );
-          if (!mounted) return;
-          ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+          try {
+            final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+              chatId,
+            );
+            if (!mounted) return;
+            ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+          } catch (e) {
+            log('Failed to load offline messages: $e', name: 'ChatScreen');
+          }
         }
       }
     } catch (e) {
+      log('Failed to mark messages as delivered: $e', name: 'ChatScreen');
       // On error, ensure we still have offline messages if current list is empty
       if (mounted) {
-        final currentMessages = ref.read(messagesProvider(chatId));
-        if (currentMessages.isEmpty) {
-          final offlineMessages = await SqfliteHelper.getDeliveredMessages(
-            chatId,
-          );
-          if (!mounted) return;
-          ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+        final chatId = ref.read(chatIdProvider);
+        if (chatId != null) {
+          final currentMessages = ref.read(messagesProvider(chatId));
+          if (currentMessages.isEmpty) {
+            try {
+              final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+                chatId,
+              );
+              if (!mounted) return;
+              ref.read(messagesProvider(chatId).notifier).state =
+                  offlineMessages;
+            } catch (e) {
+              log(
+                'Failed to load offline messages as fallback: $e',
+                name: 'ChatScreen',
+              );
+            }
+          }
         }
       }
     }
@@ -322,7 +364,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
         // Save all fetched messages to SQLite for persistence
         for (final msg in sentMessages) {
-          await SqfliteHelper.insertMessage(msg);
+          try {
+            await SqfliteHelper.insertMessage(msg);
+          } catch (e) {
+            log('Failed to save message to SQLite: $e', name: 'ChatScreen');
+            // Continue with other messages even if one fails
+          }
         }
         if (mounted) {
           ref.read(messagesProvider(chatId).notifier).state = allMessages;
@@ -331,17 +378,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         return true;
       }
     } catch (e) {
+      log('Failed to load messages: $e', name: 'ChatScreen');
       if (!mounted) return false;
       final chatId = ref.read(chatIdProvider);
       if (chatId == null) return false;
       // Load from SQLite as fallback
       if (mounted) {
-        final offlineMessages = await SqfliteHelper.getDeliveredMessages(
-          chatId,
-        );
-        if (mounted) {
-          ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
-          ref.read(isLoadingChatScreenProvider.notifier).state = false;
+        try {
+          final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+            chatId,
+          );
+          if (mounted) {
+            ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+            ref.read(isLoadingChatScreenProvider.notifier).state = false;
+          }
+        } catch (e) {
+          log(
+            'Failed to load offline messages as fallback: $e',
+            name: 'ChatScreen',
+          );
+          if (mounted) {
+            ref.read(isLoadingChatScreenProvider.notifier).state = false;
+          }
         }
       }
       return false;
@@ -396,14 +454,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 newMessage.receiverId == _currentUserId &&
                 mounted) {
               // Mark this specific message as delivered
-              _markSingleMessageAsDelivered(newMessage.id);
+              try {
+                _markSingleMessageAsDelivered(newMessage.id);
+              } catch (e) {
+                log(
+                  'Failed to mark message as delivered: $e',
+                  name: 'ChatScreen',
+                );
+              }
             }
 
             if (newMessage.status == 'delivered') {
               _handleDeliveredMessage(newMessage);
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          log('Failed to process incoming message: $e', name: 'ChatScreen');
+        }
       });
     } catch (e) {}
   }
@@ -413,7 +480,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // 1. ALWAYS save to SQLite for BOTH sender and receiver when a message is delivered
       // This is crucial because images/audio are deleted from Appwrite after delivery
       if (message.status == 'delivered') {
-        await SqfliteHelper.insertMessage(message);
+        try {
+          await SqfliteHelper.insertMessage(message);
+        } catch (e) {
+          log(
+            'Failed to save delivered message to SQLite: $e',
+            name: 'ChatScreen',
+          );
+        }
       }
 
       // 2. Only the receiver handles downloading files and deleting from cloud
@@ -428,7 +502,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           await _handleAudioDelivery(message);
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      log('Failed to handle delivered message: $e', name: 'ChatScreen');
+    }
   }
 
   Future<void> _handleImageDelivery(Message message) async {
@@ -472,7 +548,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
           // Delete message document from Appwrite Database
           await ChatService.deleteMessageFromAppwrite(message.id);
-        } catch (e) {}
+        } catch (e) {
+          log(
+            'Failed to cleanup image from cloud storage: $e',
+            name: 'ChatScreen',
+          );
+        }
         return;
       }
 
@@ -480,7 +561,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           'https://fra.cloud.appwrite.io/v1/storage/buckets/$bucketId/files/${message.imageId}/view?project=697035fd003aa22ae623';
 
       // 3. Download the image (only if it doesn't exist)
-      await Dio().download(imageUrl, savePath);
+      try {
+        await Dio().download(imageUrl, savePath);
+      } catch (e) {
+        log('Failed to download image: $e', name: 'ChatScreen');
+        // Set loading to false on download error
+        if (mounted) {
+          ref
+                  .read(
+                    imageLoadingStateProvider((
+                      message.imageId!,
+                      _chatId,
+                    )).notifier,
+                  )
+                  .state =
+              false;
+        }
+        return;
+      }
 
       // 4. CRITICAL: Update provider after successful download
       if (mounted) {
@@ -507,8 +605,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         await storage.deleteFile(bucketId: bucketId, fileId: message.imageId!);
         // Delete message document from Appwrite Database
         await ChatService.deleteMessageFromAppwrite(message.id);
-      } catch (e) {}
+      } catch (e) {
+        log(
+          'Failed to save image to gallery or cleanup cloud storage: $e',
+          name: 'ChatScreen',
+        );
+      }
     } catch (e) {
+      log('Failed to handle image delivery: $e', name: 'ChatScreen');
       // Set loading to false even on error
       if (mounted) {
         ref
@@ -578,7 +682,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
           // Delete message document from Appwrite Database
           await ChatService.deleteMessageFromAppwrite(message.id);
-        } catch (e) {}
+        } catch (e) {
+          log(
+            'Failed to cleanup audio from cloud storage: $e',
+            name: 'ChatScreen',
+          );
+        }
         return;
       }
 
@@ -586,7 +695,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           'https://fra.cloud.appwrite.io/v1/storage/buckets/$bucketId/files/${message.audioId}/view?project=697035fd003aa22ae623';
 
       // 3. Download the audio (only if it doesn't exist)
-      await Dio().download(audioUrl, savePath);
+      try {
+        await Dio().download(audioUrl, savePath);
+      } catch (e) {
+        log('Failed to download audio: $e', name: 'ChatScreen');
+        // Set loading to false and error to true on download failure
+        if (mounted) {
+          ref
+                  .read(
+                    audioLoadingStateProvider((
+                      message.audioId!,
+                      _chatId,
+                    )).notifier,
+                  )
+                  .state =
+              false;
+          ref
+                  .read(
+                    audioErrorProvider((message.audioId!, _chatId)).notifier,
+                  )
+                  .state =
+              true;
+        }
+        return;
+      }
 
       // 4. CRITICAL: Update provider after successful download
       if (mounted) {
@@ -620,8 +752,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
         // Delete message document from Appwrite Database
         await ChatService.deleteMessageFromAppwrite(message.id);
-      } catch (e) {}
+      } catch (e) {
+        log(
+          'Failed to cleanup audio from cloud storage: $e',
+          name: 'ChatScreen',
+        );
+      }
     } catch (e) {
+      log('Failed to handle audio delivery: $e', name: 'ChatScreen');
       // Set loading to false and error to true on failure
       if (mounted) {
         ref
@@ -643,11 +781,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   // Mark a single specific message as delivered (for real-time auto-delivery)
   Future<void> _markSingleMessageAsDelivered(String messageId) async {
-    if (!mounted) return;
-    final chatId = ref.read(chatIdProvider);
-    if (chatId == null || _currentUserId == null || !mounted) return;
-
     try {
+      if (!mounted) return;
+      final chatId = ref.read(chatIdProvider);
+      if (chatId == null || _currentUserId == null || !mounted) return;
+
       // Update the specific message status to 'delivered'
       final updatedMessage = await ChatService.updateMessageStatus(
         messageId,
@@ -675,17 +813,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           await _handleDeliveredMessage(updatedMsg);
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      log('Failed to mark single message as delivered: $e', name: 'ChatScreen');
+    }
   }
 
   void _subscribeToTyping() {
-    if (!mounted) return;
-
-    final chatId = ref.read(chatIdProvider);
-    final currentUserId = ref.read(currentUserIdProvider);
-    if (chatId == null) return;
-
     try {
+      if (!mounted) return;
+
+      final chatId = ref.read(chatIdProvider);
+      final currentUserId = ref.read(currentUserIdProvider);
+      if (chatId == null) return;
+
       typingSubscription = ChatService.subscribeToTyping(chatId, (response) {
         if (!mounted) return;
         try {
@@ -694,15 +834,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ref.read(isTypingProvider.notifier).state =
                 response.payload['isTyping'] ?? false;
           }
-        } catch (e) {}
+        } catch (e) {
+          log('Failed to process typing indicator: $e', name: 'ChatScreen');
+        }
       });
-    } catch (e) {}
+    } catch (e) {
+      log('Failed to setup typing subscription: $e', name: 'ChatScreen');
+    }
   }
 
   void _subscribeToPresence() {
-    if (!mounted) return;
-
     try {
+      if (!mounted) return;
+
       presenceSubscription = ChatService.subscribeToPresence(widget.contact.uid, (
         response,
       ) {
@@ -726,11 +870,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               _currentUserId != null &&
               _chatId != null) {
             // Contact just came online, mark their messages as delivered
-            _markMessagesAsDeliveredAndUpdate(widget.contact.uid);
+            try {
+              _markMessagesAsDeliveredAndUpdate(widget.contact.uid);
+            } catch (e) {
+              log(
+                'Failed to mark messages as delivered on presence change: $e',
+                name: 'ChatScreen',
+              );
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          log('Failed to process presence update: $e', name: 'ChatScreen');
+        }
       });
-    } catch (e) {}
+    } catch (e) {
+      log('Failed to setup presence subscription: $e', name: 'ChatScreen');
+    }
   }
 
   Future<void> _checkUserPresence() async {
@@ -753,44 +908,60 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _sendMessage() async {
-    if (!mounted) return;
-
-    final currentUserId = ref.read(currentUserIdProvider);
-    final chatId = ref.read(chatIdProvider);
-    final networkOnlineAsync = ref.read(networkConnectivityProvider);
-    final hasInternet = networkOnlineAsync.value ?? true;
-    final recordingPath = ref.read(recordingPathProvider);
-
-    // Check if there's an audio recording to send
-    if (recordingPath != null) {
-      // Send audio message
-      await _audioHandler.sendAudioMessage();
-      return;
-    }
-
-    if (_messageController.text.trim().isEmpty ||
-        currentUserId == null ||
-        chatId == null) {
-      return;
-    }
-
-    // Check internet connectivity first
-    if (!hasInternet) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Message failed to send - No internet connection'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
-    final messageText = _messageController.text.trim();
-    _messageController.clear();
-
     try {
+      if (!mounted) return;
+
+      final currentUserId = ref.read(currentUserIdProvider);
+      final chatId = ref.read(chatIdProvider);
+      final networkOnlineAsync = ref.read(networkConnectivityProvider);
+      final hasInternet = networkOnlineAsync.value ?? true;
+      final recordingPath = ref.read(recordingPathProvider);
+
+      // Check if there's an audio recording to send
+      if (recordingPath != null) {
+        // Send audio message
+        try {
+          await _audioHandler.sendAudioMessage();
+        } catch (e) {
+          log('Failed to send audio message: $e', name: 'ChatScreen');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Unable to send audio message. Please try again.',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+        return;
+      }
+
+      if (_messageController.text.trim().isEmpty ||
+          currentUserId == null ||
+          chatId == null) {
+        return;
+      }
+
+      // Check internet connectivity first
+      if (!hasInternet) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Unable to send message. Please check your internet connection and try again.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final messageText = _messageController.text.trim();
+      _messageController.clear();
+
       final messageDoc = await ChatService.sendMessage(
         chatId: chatId,
         senderId: currentUserId,
@@ -811,125 +982,95 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ];
 
         // NEW: Save the sent message to SQLite immediately
-        await SqfliteHelper.insertMessage(newMessage);
+        try {
+          await SqfliteHelper.insertMessage(newMessage);
+        } catch (e) {
+          log('Failed to save sent message to SQLite: $e', name: 'ChatScreen');
+        }
 
         // Send push notification when message status is "sent"
         if (newMessage.status == 'sent') {
-          developer.log(
-            '💬 [ChatScreen] Message sent with status "sent", triggering push notification...',
-          );
-          _sendPushNotificationToReceiver(newMessage);
-        } else {
-          developer.log(
-            '💬 [ChatScreen] Message status is "${newMessage.status}", not sending push notification',
-          );
+          try {
+            _sendPushNotificationToReceiver(newMessage);
+          } catch (e) {
+            log('Failed to send push notification: $e', name: 'ChatScreen');
+          }
         }
-
-        // Import the providers and invalidate them for this contact
-        // This ensures the sender's chat list updates immediately
 
         try {
           if (!mounted) return;
           ref.invalidate(lastMessageProvider(widget.contact.uid));
-        } catch (e) {}
+        } catch (e) {
+          log(
+            'Failed to invalidate last message provider: $e',
+            name: 'ChatScreen',
+          );
+        }
+      } else if (mounted) {
+        // Message failed to send
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message failed to send. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
 
-      await ChatService.setTyping(
-        chatId: chatId,
-        userId: currentUserId,
-        isTyping: false,
-      );
-    } catch (e) {}
+      try {
+        await ChatService.setTyping(
+          chatId: chatId,
+          userId: currentUserId,
+          isTyping: false,
+        );
+      } catch (e) {
+        log('Failed to clear typing status: $e', name: 'ChatScreen');
+      }
+    } catch (e) {
+      log('Failed to send message: $e', name: 'ChatScreen');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message failed to send. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   // Send push notification to receiver when message is sent
   Future<void> _sendPushNotificationToReceiver(Message message) async {
     try {
-      developer.log(
-        '💬 [ChatScreen] ========== STARTING PUSH NOTIFICATION PROCESS ==========',
-      );
-      developer.log('💬 [ChatScreen] Message ID: ${message.id}');
-      developer.log('💬 [ChatScreen] Message status: ${message.status}');
-      developer.log('💬 [ChatScreen] Receiver ID: ${widget.contact.uid}');
-      developer.log(
-        '💬 [ChatScreen] Message type: ${message.imageId != null
-            ? 'Image'
-            : message.audioId != null
-            ? 'Audio'
-            : 'Text'}',
-      );
-
-      // Get receiver's FCM token from Firestore
-      developer.log(
-        '💬 [ChatScreen] Step 1: Fetching receiver FCM token from Firestore...',
-      );
       final receiverDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.contact.uid)
           .get();
 
       if (!receiverDoc.exists) {
-        developer.log(
-          '💬 [ChatScreen] ERROR: Receiver document does not exist in Firestore',
-        );
         return;
       }
 
       final receiverData = receiverDoc.data();
-      developer.log(
-        '💬 [ChatScreen] Step 1: Receiver document data keys: ${receiverData?.keys.toList()}',
-      );
-
       final receiverToken = receiverData?['fcmToken'] as String?;
-      developer.log(
-        '💬 [ChatScreen] Step 1: Receiver FCM token: ${receiverToken?.substring(0, 20)}...',
-      );
 
       if (receiverToken == null || receiverToken.isEmpty) {
-        developer.log(
-          '💬 [ChatScreen] ERROR: Receiver FCM token is null or empty',
-        );
         return;
       }
-
-      // Get sender's name from Firestore
-      developer.log(
-        '💬 [ChatScreen] Step 2: Fetching sender info from Firestore...',
-      );
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
-        developer.log('💬 [ChatScreen] ERROR: Current user is null');
         return;
       }
-
-      developer.log(
-        '💬 [ChatScreen] Step 2: Current user ID: ${currentUser.uid}',
-      );
-
       final senderDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser.uid)
           .get();
 
       if (!senderDoc.exists) {
-        developer.log(
-          '💬 [ChatScreen] ERROR: Sender document does not exist in Firestore',
-        );
         return;
       }
 
       final senderData = senderDoc.data();
-      developer.log(
-        '💬 [ChatScreen] Step 2: Sender document data keys: ${senderData?.keys.toList()}',
-      );
-
       final senderName = senderData?['name'] as String? ?? 'Someone';
-      developer.log('💬 [ChatScreen] Step 2: Sender name: $senderName');
-
-      // Send push notification
-      developer.log(
-        '💬 [ChatScreen] Step 3: Preparing notification content...',
-      );
       final notificationService = NotificationService();
 
       // Determine the message body based on message type
@@ -943,53 +1084,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       } else {
         notificationBody = 'Sent a message';
       }
-
-      developer.log('💬 [ChatScreen] Step 3: Notification title: $senderName');
-      developer.log(
-        '💬 [ChatScreen] Step 3: Notification body: $notificationBody',
-      );
-      developer.log(
-        '💬 [ChatScreen] Step 4: Calling NotificationService.sendPushNotification...',
-      );
-
       await notificationService.sendPushNotification(
         deviceToken: receiverToken,
         title: senderName,
         body: notificationBody,
       );
-
-      developer.log(
-        '💬 [ChatScreen] ✅ SUCCESS: Push notification process completed successfully!',
-      );
     } catch (e) {
-      developer.log(
-        '💬 [ChatScreen] ❌ ERROR in _sendPushNotificationToReceiver: $e',
-      );
-      developer.log('💬 [ChatScreen] Error type: ${e.runtimeType}');
-      // Silently handle errors - notification failure shouldn't break chat
+      log('Failed to send push notification: $e', name: 'ChatScreen');
     }
   }
 
   void _onTypingChanged(String text) {
-    if (!mounted) return;
+    try {
+      if (!mounted) return;
 
-    final currentUserId = ref.read(currentUserIdProvider);
-    final chatId = ref.read(chatIdProvider);
+      final currentUserId = ref.read(currentUserIdProvider);
+      final chatId = ref.read(chatIdProvider);
 
-    if (currentUserId == null || chatId == null) return;
+      if (currentUserId == null || chatId == null) return;
 
-    if (text.isNotEmpty) {
-      ChatService.setTyping(
-        chatId: chatId,
-        userId: currentUserId,
-        isTyping: true,
-      );
-    } else {
-      ChatService.setTyping(
-        chatId: chatId,
-        userId: currentUserId,
-        isTyping: false,
-      );
+      if (text.isNotEmpty) {
+        ChatService.setTyping(
+          chatId: chatId,
+          userId: currentUserId,
+          isTyping: true,
+        );
+      } else {
+        ChatService.setTyping(
+          chatId: chatId,
+          userId: currentUserId,
+          isTyping: false,
+        );
+      }
+    } catch (e) {
+      log('Failed to update typing status: $e', name: 'ChatScreen');
     }
   }
 
@@ -1032,70 +1160,111 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _handleConnectivityChange(bool isOnline) async {
-    if (_currentUserId == null || !mounted) return;
+    try {
+      if (_currentUserId == null || !mounted) return;
 
-    if (isOnline) {
-      // Try to resume subscriptions first
-      messageSubscription?.resume();
-      typingSubscription?.resume();
-      presenceSubscription?.resume();
+      if (isOnline) {
+        // Try to resume subscriptions first
+        messageSubscription?.resume();
+        typingSubscription?.resume();
+        presenceSubscription?.resume();
 
-      // If subscriptions were null or failed, recreate them
-      if (messageSubscription == null) {
-        _subscribeToMessages();
-      }
-      if (typingSubscription == null) {
-        _subscribeToTyping();
-      }
-      if (presenceSubscription == null) {
-        _subscribeToPresence();
-      }
+        // If subscriptions were null or failed, recreate them
+        if (messageSubscription == null) {
+          _subscribeToMessages();
+        }
+        if (typingSubscription == null) {
+          _subscribeToTyping();
+        }
+        if (presenceSubscription == null) {
+          _subscribeToPresence();
+        }
 
-      // Update presence to online and mark messages as delivered with UI update
-      ChatService.updatePresence(userId: _currentUserId!, online: true);
-      if (!mounted) return;
-      ref.read(isOnlineProvider.notifier).state = true;
-      final chatId = ref.read(chatIdProvider);
-      if (chatId != null) {
-        _markMessagesAsDeliveredAndUpdate(_currentUserId!);
-      }
-
-      // Restore messages first if provider is empty
-      if (!mounted) return;
-      if (chatId != null) {
-        final currentMessages = ref.read(messagesProvider(chatId));
-        if (currentMessages.isEmpty && mounted) {
-          // Load from SQLite as fallback
-          final offlineMessages = await SqfliteHelper.getDeliveredMessages(
-            chatId,
+        // Update presence to online and mark messages as delivered with UI update
+        try {
+          ChatService.updatePresence(userId: _currentUserId!, online: true);
+        } catch (e) {
+          log(
+            'Failed to update presence on reconnection: $e',
+            name: 'ChatScreen',
           );
-          if (mounted) {
-            ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+        }
+
+        if (!mounted) return;
+        ref.read(isOnlineProvider.notifier).state = true;
+        final chatId = ref.read(chatIdProvider);
+        if (chatId != null) {
+          try {
+            _markMessagesAsDeliveredAndUpdate(_currentUserId!);
+          } catch (e) {
+            log(
+              'Failed to mark messages as delivered on reconnection: $e',
+              name: 'ChatScreen',
+            );
           }
         }
+
+        // Restore messages first if provider is empty
+        if (!mounted) return;
+        if (chatId != null) {
+          final currentMessages = ref.read(messagesProvider(chatId));
+          if (currentMessages.isEmpty && mounted) {
+            // Load from SQLite as fallback
+            try {
+              final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+                chatId,
+              );
+              if (mounted) {
+                ref.read(messagesProvider(chatId).notifier).state =
+                    offlineMessages;
+              }
+            } catch (e) {
+              log(
+                'Failed to load offline messages on reconnection: $e',
+                name: 'ChatScreen',
+              );
+            }
+          }
+        }
+
+        // Then reload to get latest messages from server
+        try {
+          _reloadMessagesAfterReconnection();
+        } catch (e) {
+          log(
+            'Failed to reload messages after reconnection: $e',
+            name: 'ChatScreen',
+          );
+        }
+
+        try {
+          _checkUserPresence();
+        } catch (e) {
+          log(
+            'Failed to check user presence on reconnection: $e',
+            name: 'ChatScreen',
+          );
+        }
+      } else {
+        // Going offline - messages are already persisted in the family provider
+        messageSubscription?.pause();
+        typingSubscription?.pause();
+        presenceSubscription?.pause();
+
+        if (mounted) {
+          ref.read(isOnlineProvider.notifier).state =
+              false; // update the receiver online status to offline
+        }
       }
-
-      // Then reload to get latest messages from server
-      _reloadMessagesAfterReconnection();
-
-      _checkUserPresence();
-    } else {
-      // Going offline - messages are already persisted in the family provider
-      messageSubscription?.pause();
-      typingSubscription?.pause();
-      presenceSubscription?.pause();
-
-      if (mounted) {
-        ref.read(isOnlineProvider.notifier).state =
-            false; // update the receiver online status to offline
-      }
+    } catch (e) {
+      log('Failed to handle connectivity change: $e', name: 'ChatScreen');
     }
   }
 
   Future<void> _reloadMessagesAfterReconnection() async {
-    if (!mounted) return;
-
     try {
+      if (!mounted) return;
+
       final chatId = ref.read(chatIdProvider);
       if (chatId == null) return;
 
@@ -1121,11 +1290,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           // Process messages from Appwrite
           for (final newMsg in newMessagesList) {
             // Save to SQLite for local persistence
-            await SqfliteHelper.insertMessage(newMsg);
+            try {
+              await SqfliteHelper.insertMessage(newMsg);
+            } catch (e) {
+              log(
+                'Failed to save message to SQLite during reload: $e',
+                name: 'ChatScreen',
+              );
+            }
 
             // If it's a delivered message, clean up from Appwrite
             if (newMsg.status == 'delivered') {
-              await ChatService.deleteMessageFromAppwrite(newMsg.id);
+              try {
+                await ChatService.deleteMessageFromAppwrite(newMsg.id);
+              } catch (e) {
+                log(
+                  'Failed to delete delivered message from Appwrite: $e',
+                  name: 'ChatScreen',
+                );
+              }
             }
           }
 
@@ -1136,16 +1319,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           // No new messages from Appwrite, but don't clear existing messages
           // Only load from SQLite if we have no messages at all
           if (currentMessages.isEmpty && mounted) {
-            final offlineMessages = await SqfliteHelper.getDeliveredMessages(
-              chatId,
-            );
-            if (!mounted) return;
-            ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+            try {
+              final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+                chatId,
+              );
+              if (!mounted) return;
+              ref.read(messagesProvider(chatId).notifier).state =
+                  offlineMessages;
+            } catch (e) {
+              log(
+                'Failed to load offline messages during reload: $e',
+                name: 'ChatScreen',
+              );
+            }
           }
           // If we have existing messages, keep them as they are
         }
       }
     } catch (e) {
+      log(
+        'Failed to reload messages after reconnection: $e',
+        name: 'ChatScreen',
+      );
       // On error, don't clear existing messages
       // Only load from SQLite if we have no messages at all
       if (!mounted) return;
@@ -1153,11 +1348,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final currentMessages = ref.read(messagesProvider(chatId ?? ''));
 
       if (chatId != null && currentMessages.isEmpty && mounted) {
-        final offlineMessages = await SqfliteHelper.getDeliveredMessages(
-          chatId,
-        );
-        if (!mounted) return;
-        ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+        try {
+          final offlineMessages = await SqfliteHelper.getDeliveredMessages(
+            chatId,
+          );
+          if (!mounted) return;
+          ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+        } catch (e) {
+          log(
+            'Failed to load offline messages as fallback during reload: $e',
+            name: 'ChatScreen',
+          );
+        }
       }
     }
   }

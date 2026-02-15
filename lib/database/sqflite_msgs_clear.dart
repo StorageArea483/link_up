@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -105,7 +106,9 @@ class SqfliteMsgsClear {
             ],
           ),
           backgroundColor: AppColors.primaryBlue,
-          duration: Duration(seconds: 3),
+          duration: Duration(
+            seconds: 5,
+          ), // Increased duration for longer operation
         ),
       );
 
@@ -113,28 +116,39 @@ class SqfliteMsgsClear {
       final localMessages = await SqfliteHelper.getDeliveredMessages(chatId!);
       final sentMessages = await ChatService.getMessages(chatId!);
 
-      // 2. FIRST: Clear UI immediately to prevent widgets from trying to load deleted files
-      if (!_isMounted) return;
-      ref.read(messagesProvider(chatId!).notifier).state = [];
-
-      // 3. Delete local media files (images and audio)
+      // 2. Delete local media files (images and audio) FIRST
       await _deleteLocalMediaFiles(localMessages, sentMessages);
+
+      // 3. Clear messages from Appwrite (sent status messages) BEFORE SQLite
+      for (final doc in sentMessages.documents) {
+        try {
+          await ChatService.deleteMessageFromAppwrite(doc.$id);
+        } catch (e) {
+          log(
+            'Failed to delete message ${doc.$id} from Appwrite: $e',
+            name: 'SqfliteMsgsClear',
+          );
+          // Continue with other messages even if one fails
+        }
+      }
 
       // 4. Clear messages from local SQLite database
       await SqfliteHelper.clearChatMessages(chatId!);
 
-      // 5. Clear messages from Appwrite (sent status messages)
-      for (final doc in sentMessages.documents) {
-        await ChatService.deleteMessageFromAppwrite(doc.$id);
-      }
+      // 5. ONLY NOW clear UI after all backend operations are complete
+      if (!_isMounted) return;
+      ref.read(messagesProvider(chatId!).notifier).state = [];
 
-      // 6. Also invalidate the last message provider for this contact
+      // 6. Invalidate the last message provider for this contact
       if (contactUid != null) {
         if (!_isMounted) return;
         ref.invalidate(lastMessageProvider(contactUid!));
       }
 
-      // 7. Show success message only if context is still mounted
+      // 7. Small delay to ensure all operations are complete before showing success
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // 8. Show success message only if context is still mounted
       if (!_isMounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -150,21 +164,22 @@ class SqfliteMsgsClear {
         ),
       );
     } catch (e) {
+      log('Clear messages error: $e', name: 'SqfliteMsgsClear');
       // Show error message only if context is still mounted
       if (!_isMounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.error_outline, color: Colors.white, size: 20),
-              const SizedBox(width: 12),
+              Icon(Icons.error_outline, color: Colors.white, size: 20),
+              SizedBox(width: 12),
               Expanded(
-                child: Text('Failed to clear messages: ${e.toString()}'),
+                child: Text('Unable to clear messages. Please try again.'),
               ),
             ],
           ),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
+          duration: Duration(seconds: 3),
         ),
       );
     }
@@ -213,7 +228,11 @@ class SqfliteMsgsClear {
             await imageFile.delete();
           }
         } catch (e) {
-          // Continue with other files even if one fails
+          // Log individual file deletion errors but continue with other files
+          log(
+            'Failed to delete image file $imageId: $e',
+            name: 'SqfliteMsgsClear',
+          );
         }
       }
 
@@ -226,11 +245,16 @@ class SqfliteMsgsClear {
             await audioFile.delete();
           }
         } catch (e) {
-          // Continue with other files even if one fails
+          // Log individual file deletion errors but continue with other files
+          log(
+            'Failed to delete audio file $audioId: $e',
+            name: 'SqfliteMsgsClear',
+          );
         }
       }
     } catch (e) {
-      // Don't throw - we still want to clear messages even if media deletion fails
+      // Log media deletion errors but don't throw - we still want to clear messages
+      log('Media deletion error: $e', name: 'SqfliteMsgsClear');
     }
   }
 }

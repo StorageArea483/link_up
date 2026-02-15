@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -15,8 +17,8 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 @pragma('vm:entry-point')
 Future<void> handleBackgroundMessage(RemoteMessage message) async {
   // Handle navigation when app is opened from background notification
-  if (message.data['navigate'] == 'landing-page') {
-    navigatorKey.currentState?.pushReplacementNamed('/chat');
+  if (message.data['navigate'] == 'landing') {
+    navigatorKey.currentState?.pushReplacementNamed('/landing');
   }
 }
 
@@ -27,7 +29,9 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-  } catch (e) {}
+  } catch (e) {
+    log('Firebase initialization failed: $e', name: 'Main');
+  }
 
   // Load environment variables
   await dotenv.load(fileName: ".env");
@@ -35,12 +39,8 @@ void main() async {
   // Initialize NotificationService
   try {
     await NotificationService.initialize();
-
-    // Test the configuration
-    final testResult = await NotificationService.testConfiguration();
-    print('NotificationService test result: $testResult');
   } catch (e) {
-    print('Failed to initialize NotificationService: $e');
+    log('Notification service initialization failed: $e', name: 'Main');
   }
 
   FirebaseMessaging.onBackgroundMessage(handleBackgroundMessage);
@@ -57,7 +57,7 @@ class MyApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       home: const CheckConnection(child: LandingPage()),
       routes: {
-        '/chat': (context) => const CheckConnection(child: LandingPage()),
+        '/landing': (context) => const CheckConnection(child: LandingPage()),
       },
     );
   }

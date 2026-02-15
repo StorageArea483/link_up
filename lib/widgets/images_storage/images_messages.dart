@@ -1,5 +1,5 @@
+import 'dart:developer';
 import 'dart:io' as io;
-import 'dart:developer' as developer;
 import 'package:appwrite/appwrite.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -33,33 +33,36 @@ class ImageMessagesHandler {
   Future<bool> pickAndSendImage(ImageSource source) async {
     XFile? compressedImage;
 
-    final image = await ImagePicker().pickImage(source: source);
-    if (image == null) {
-      return false;
-    }
-
-    if (!context.mounted) return false;
-    final currentUserId = ref.read(currentUserIdProvider);
-    if (!context.mounted) return false;
-    final chatId = ref.read(chatIdProvider);
-
-    if (currentUserId == null || chatId == null) {
-      return false;
-    }
-
-    // Check internet connection
-    if (!context.mounted) return false;
-    final networkOnlineAsync = ref.read(networkConnectivityProvider);
-    final hasInternet = networkOnlineAsync.value ?? true;
-
-    if (!hasInternet) {
-      if (context.mounted) {
-        _showSnackBar('No internet connection', Colors.red);
-      }
-      return false;
-    }
-
     try {
+      final image = await ImagePicker().pickImage(source: source);
+      if (image == null) {
+        return false;
+      }
+
+      if (!context.mounted) return false;
+      final currentUserId = ref.read(currentUserIdProvider);
+      if (!context.mounted) return false;
+      final chatId = ref.read(chatIdProvider);
+
+      if (currentUserId == null || chatId == null) {
+        return false;
+      }
+
+      // Check internet connection
+      if (!context.mounted) return false;
+      final networkOnlineAsync = ref.read(networkConnectivityProvider);
+      final hasInternet = networkOnlineAsync.value ?? true;
+
+      if (!hasInternet) {
+        if (context.mounted) {
+          _showSnackBar(
+            'Unable to upload. Please check your internet connection and try again.',
+            Colors.red,
+          );
+        }
+        return false;
+      }
+
       if (context.mounted) {
         _showUploadingDialog();
       }
@@ -80,7 +83,10 @@ class ImageMessagesHandler {
       if (compressedImage == null) {
         if (context.mounted) {
           Navigator.pop(context);
-          _showSnackBar('Failed to compress image', Colors.red);
+          _showSnackBar(
+            'Unable to process image. Please try again.',
+            Colors.red,
+          );
         }
         return false;
       }
@@ -114,10 +120,17 @@ class ImageMessagesHandler {
               false;
           try {
             await Gal.putImage(savePath, album: 'LinkUp');
-          } catch (_) {}
+          } catch (e) {
+            // Log gallery save errors but don't fail the operation
+            log(
+              'Failed to save image to gallery: $e',
+              name: 'ImageMessagesHandler',
+            );
+          }
         }
-      } catch (_) {
-        // Ignore local save errors
+      } catch (e) {
+        // Log local save errors but don't fail the operation
+        log('Failed to save image locally: $e', name: 'ImageMessagesHandler');
       }
 
       // 🔥 Send message
@@ -144,19 +157,12 @@ class ImageMessagesHandler {
 
         // Send push notification when image message status is "sent"
         if (newMessage.status == 'sent') {
-          developer.log(
-            '📷 [ImageMessages] Image message sent with status "sent", triggering push notification...',
-          );
           _sendPushNotificationToReceiver(newMessage);
-        } else {
-          developer.log(
-            '📷 [ImageMessages] Image message status is "${newMessage.status}", not sending push notification',
-          );
         }
 
         if (context.mounted) {
           Navigator.pop(context);
-          _showSnackBar('Image uploaded successfully', Colors.green);
+          _showSnackBar('Image sent successfully', Colors.green);
         }
 
         if (context.mounted) {
@@ -167,13 +173,18 @@ class ImageMessagesHandler {
       } else {
         if (context.mounted) {
           Navigator.pop(context);
-          _showSnackBar('Failed to send image message', Colors.red);
+          _showSnackBar('Unable to send image. Please try again.', Colors.red);
         }
         return false;
       }
     } catch (e) {
+      log('Error in pickAndSendImage: $e', name: 'ImageMessagesHandler');
       if (context.mounted) {
         Navigator.pop(context);
+        _showSnackBar(
+          'Unable to upload image. Please check your connection and try again.',
+          Colors.red,
+        );
       }
       return false;
     } finally {
@@ -181,7 +192,12 @@ class ImageMessagesHandler {
       if (compressedImage != null) {
         try {
           await io.File(compressedImage.path).delete();
-        } catch (_) {}
+        } catch (e) {
+          log(
+            'Failed to cleanup temporary file: $e',
+            name: 'ImageMessagesHandler',
+          );
+        }
       }
     }
   }
@@ -209,101 +225,43 @@ class ImageMessagesHandler {
   // Send push notification to receiver when image message is sent
   Future<void> _sendPushNotificationToReceiver(Message message) async {
     try {
-      developer.log(
-        '📷 [ImageMessages] ========== STARTING IMAGE PUSH NOTIFICATION PROCESS ==========',
-      );
-      developer.log('📷 [ImageMessages] Message ID: ${message.id}');
-      developer.log('📷 [ImageMessages] Message status: ${message.status}');
-      developer.log('📷 [ImageMessages] Receiver ID: ${contact.uid}');
-      developer.log('📷 [ImageMessages] Image ID: ${message.imageId}');
-
       // Get receiver's FCM token from Firestore
-      developer.log(
-        '📷 [ImageMessages] Step 1: Fetching receiver FCM token from Firestore...',
-      );
       final receiverDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(contact.uid)
           .get();
 
-      if (!receiverDoc.exists) {
-        developer.log(
-          '📷 [ImageMessages] ERROR: Receiver document does not exist in Firestore',
-        );
-        return;
-      }
+      if (!receiverDoc.exists) return;
 
       final receiverData = receiverDoc.data();
-      developer.log(
-        '📷 [ImageMessages] Step 1: Receiver document data keys: ${receiverData?.keys.toList()}',
-      );
-
       final receiverToken = receiverData?['fcmToken'] as String?;
-      developer.log(
-        '📷 [ImageMessages] Step 1: Receiver FCM token: ${receiverToken?.substring(0, 20)}...',
-      );
 
-      if (receiverToken == null || receiverToken.isEmpty) {
-        developer.log(
-          '📷 [ImageMessages] ERROR: Receiver FCM token is null or empty',
-        );
-        return;
-      }
+      if (receiverToken == null || receiverToken.isEmpty) return;
 
       // Get sender's name from Firestore
-      developer.log(
-        '📷 [ImageMessages] Step 2: Fetching sender info from Firestore...',
-      );
       final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        developer.log('📷 [ImageMessages] ERROR: Current user is null');
-        return;
-      }
-
-      developer.log(
-        '📷 [ImageMessages] Step 2: Current user ID: ${currentUser.uid}',
-      );
+      if (currentUser == null) return;
 
       final senderDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser.uid)
           .get();
 
-      if (!senderDoc.exists) {
-        developer.log(
-          '📷 [ImageMessages] ERROR: Sender document does not exist in Firestore',
-        );
-        return;
-      }
+      if (!senderDoc.exists) return;
 
       final senderData = senderDoc.data();
-      developer.log(
-        '📷 [ImageMessages] Step 2: Sender document data keys: ${senderData?.keys.toList()}',
-      );
-
       final senderName = senderData?['name'] as String? ?? 'Someone';
-      developer.log('📷 [ImageMessages] Step 2: Sender name: $senderName');
 
       // Send push notification
-      developer.log(
-        '📷 [ImageMessages] Step 3: Calling NotificationService.sendPushNotification...',
-      );
       final notificationService = NotificationService();
       await notificationService.sendPushNotification(
         deviceToken: receiverToken,
         title: senderName,
         body: '📷 Photo',
       );
-
-      developer.log(
-        '📷 [ImageMessages] ✅ SUCCESS: Image push notification process completed successfully!',
-      );
     } catch (e) {
-      developer.log(
-        '📷 [ImageMessages] ❌ ERROR in _sendPushNotificationToReceiver: $e',
-      );
-      developer.log('📷 [ImageMessages] Error type: ${e.runtimeType}');
-      // Silently handle errors - notification failure shouldn't break chat
+      // Log notification errors for debugging but don't fail the operation
+      log('Failed to send push notification: $e', name: 'ImageMessagesHandler');
     }
   }
 }
@@ -334,7 +292,7 @@ class ImageInputButtons extends ConsumerWidget {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Failed to upload image'),
+                    content: Text('Unable to upload image. Please try again.'),
                     backgroundColor: Colors.red,
                   ),
                 );

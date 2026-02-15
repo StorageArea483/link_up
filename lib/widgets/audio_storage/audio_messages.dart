@@ -1,5 +1,5 @@
+import 'dart:developer';
 import 'dart:io' as io;
-import 'dart:developer' as developer;
 import 'package:appwrite/appwrite.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -37,23 +37,68 @@ class AudioMessagesHandler {
   }
 
   void _initializePlayer() {
-    // Listen to player state changes
-    player.playerStateStream.listen((state) {
-      try {
-        if (state.processingState == ProcessingState.completed) {
-          _isAudioCompleted = true;
-          if (context.mounted) {
+    // Listen to player state changes with proper error handling
+    player.playerStateStream.listen(
+      (state) {
+        try {
+          if (!context.mounted) return; // Check context before any operations
+
+          if (state.processingState == ProcessingState.completed) {
+            _isAudioCompleted = true;
             ref.read(isPlayingPreviewProvider.notifier).state = false;
             // Reset position to beginning when audio completes
             ref.read(positionProvider.notifier).state = Duration.zero;
+          } else if (state.processingState == ProcessingState.ready &&
+              state.playing) {
+            // Reset the completed flag when audio starts playing again
+            _isAudioCompleted = false;
           }
-        } else if (state.processingState == ProcessingState.ready &&
-            state.playing) {
-          // Reset the completed flag when audio starts playing again
-          _isAudioCompleted = false;
+        } catch (e) {
+          // Log player state errors for debugging
+          log('Player state error: $e', name: 'AudioMessagesHandler');
         }
-      } catch (e) {}
-    });
+      },
+      onError: (error) {
+        // Log player state stream errors for debugging
+        log('Player state stream error: $error', name: 'AudioMessagesHandler');
+      },
+    );
+
+    // Listen to position changes to update UI
+    player.positionStream.listen(
+      (position) {
+        try {
+          if (!context.mounted || _isAudioCompleted) return;
+          ref.read(positionProvider.notifier).state = position;
+        } catch (e) {
+          // Log position update errors for debugging
+          log('Position update error: $e', name: 'AudioMessagesHandler');
+        }
+      },
+      onError: (error) {
+        // Log position stream errors for debugging
+        log('Position stream error: $error', name: 'AudioMessagesHandler');
+      },
+    );
+
+    // Listen to duration changes
+    player.durationStream.listen(
+      (duration) {
+        try {
+          if (!context.mounted) return;
+          if (duration != null) {
+            ref.read(durationProvider.notifier).state = duration;
+          }
+        } catch (e) {
+          // Log duration update errors for debugging
+          log('Duration update error: $e', name: 'AudioMessagesHandler');
+        }
+      },
+      onError: (error) {
+        // Log duration stream errors for debugging
+        log('Duration stream error: $error', name: 'AudioMessagesHandler');
+      },
+    );
   }
 
   // Getter to check if updates should be blocked
@@ -61,7 +106,9 @@ class AudioMessagesHandler {
 
   Future<void> startRecording(String userId) async {
     try {
-      if (await record.hasPermission()) {
+      final hasPermission = await record.hasPermission();
+
+      if (hasPermission) {
         // Reset the completed flag when starting a new recording
         _isAudioCompleted = false;
 
@@ -84,13 +131,20 @@ class AudioMessagesHandler {
         }
       } else {
         if (context.mounted) {
-          _showSnackBar('Microphone permission denied', Colors.red);
+          _showSnackBar(
+            'Unable to access microphone. Please check permissions.',
+            Colors.red,
+          );
         }
       }
     } catch (e) {
+      log('Recording start error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
         ref.read(toggleRecordingProvider.notifier).state = false;
-        _showSnackBar('Audio recording failed $e', Colors.red);
+        _showSnackBar(
+          'Unable to start recording. Please try again.',
+          Colors.red,
+        );
       }
     }
   }
@@ -146,9 +200,13 @@ class AudioMessagesHandler {
         }
       }
     } catch (e) {
+      log('Recording stop error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
         ref.read(toggleRecordingProvider.notifier).state = false;
-        _showSnackBar('Audio recording failed', Colors.red);
+        _showSnackBar(
+          'Unable to stop recording. Please try again.',
+          Colors.red,
+        );
       }
     }
   }
@@ -181,7 +239,10 @@ class AudioMessagesHandler {
 
     if (!hasInternet) {
       if (context.mounted) {
-        _showSnackBar('No internet connection', Colors.red);
+        _showSnackBar(
+          'Unable to send audio. Please check your internet connection and try again.',
+          Colors.red,
+        );
       }
       return false;
     }
@@ -194,10 +255,15 @@ class AudioMessagesHandler {
 
       // Verify file exists before upload
       final recordingFile = io.File(recordingPath);
-      if (!await recordingFile.exists()) {
+      final fileExists = await recordingFile.exists();
+
+      if (!fileExists) {
         if (context.mounted) {
           Navigator.pop(context);
-          _showSnackBar('Recording file not found', Colors.red);
+          _showSnackBar(
+            'Unable to find recording. Please try again.',
+            Colors.red,
+          );
         }
         return false;
       }
@@ -207,7 +273,7 @@ class AudioMessagesHandler {
       if (fileSize == 0) {
         if (context.mounted) {
           Navigator.pop(context);
-          _showSnackBar('Recording file is empty', Colors.red);
+          _showSnackBar('Recording is empty. Please try again.', Colors.red);
         }
         return false;
       }
@@ -257,6 +323,7 @@ class AudioMessagesHandler {
 
       if (messageDoc != null) {
         final newMessage = Message.fromJson(messageDoc.data);
+
         if (!context.mounted) {
           return false;
         }
@@ -269,19 +336,12 @@ class AudioMessagesHandler {
           ...currentMessages,
         ];
 
-        // NEW: Save the sent message to SQLite immediately
+        // Save the sent message to SQLite immediately
         await SqfliteHelper.insertMessage(newMessage);
 
         // Send push notification when audio message status is "sent"
         if (newMessage.status == 'sent') {
-          developer.log(
-            '🎵 [AudioMessages] Audio message sent with status "sent", triggering push notification...',
-          );
           _sendPushNotificationToReceiver(newMessage);
-        } else {
-          developer.log(
-            '🎵 [AudioMessages] Audio message status is "${newMessage.status}", not sending push notification',
-          );
         }
 
         if (context.mounted) {
@@ -302,15 +362,19 @@ class AudioMessagesHandler {
       } else {
         if (context.mounted) {
           Navigator.pop(context);
-          _showSnackBar('Failed to send audio message', Colors.red);
+          _showSnackBar('Unable to send audio. Please try again.', Colors.red);
         }
       }
 
       return true;
     } catch (e) {
+      log('Send audio error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
         Navigator.pop(context);
-        _showSnackBar('Failed to send audio', Colors.red);
+        _showSnackBar(
+          'Unable to send audio. Please check your connection and try again.',
+          Colors.red,
+        );
       }
       return false;
     }
@@ -318,6 +382,7 @@ class AudioMessagesHandler {
 
   Future<void> handlePlayPause() async {
     if (!context.mounted) return;
+
     final recordingPath = ref.read(recordingPathProvider);
     if (recordingPath == null) return;
 
@@ -330,42 +395,65 @@ class AudioMessagesHandler {
       } else {
         // Verify file exists before trying to play
         final file = io.File(recordingPath);
-        if (!await file.exists()) {
+        final fileExists = await file.exists();
+
+        if (!fileExists) {
           if (context.mounted) {
-            _showSnackBar('Audio file not found', Colors.red);
+            _showSnackBar(
+              'Unable to find audio file. Please try again.',
+              Colors.red,
+            );
           }
           return;
         }
 
         // Check file size to ensure it has content
         final fileSize = await file.length();
+
         if (fileSize == 0) {
           if (context.mounted) {
-            _showSnackBar('Audio file is empty', Colors.red);
+            _showSnackBar('Audio file is empty. Please try again.', Colors.red);
           }
           return;
         }
 
-        // Set the audio source
+        // Stop any current playback before setting new source
+        try {
+          if (player.playing) {
+            await player.stop();
+          }
+        } catch (e) {
+          // Log stop error for debugging
+          log('Player stop error: $e', name: 'AudioMessagesHandler');
+        }
+
+        // Set the audio source with proper error handling
         try {
           await player.setFilePath(recordingPath);
         } catch (e) {
+          log('Audio file load error: $e', name: 'AudioMessagesHandler');
           if (context.mounted) {
-            _showSnackBar('Failed to load audio file', Colors.red);
+            _showSnackBar(
+              'Unable to load audio file. Please try again.',
+              Colors.red,
+            );
           }
           return;
         }
+
         // Reset the completed flag when starting playback
         _isAudioCompleted = false;
         if (context.mounted) {
           ref.read(isPlayingPreviewProvider.notifier).state = true;
         }
+
         await player.play();
       }
     } catch (e) {
+      log('Audio playback error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
         ref.read(isPlayingPreviewProvider.notifier).state = false;
-        _showSnackBar('Failed to play audio', Colors.red);
+        _showSnackBar('Unable to play audio. Please try again.', Colors.red);
       }
     }
   }
@@ -376,15 +464,18 @@ class AudioMessagesHandler {
       _isAudioCompleted = false;
       await player.seek(Duration(seconds: value.toInt()));
     } catch (e) {
+      log('Audio seek error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
-        _showSnackBar('Failed to seek audio', Colors.red);
+        _showSnackBar('Unable to seek audio position', Colors.red);
       }
     }
   }
 
   Future<void> deleteRecording() async {
     if (!context.mounted) return;
+
     final path = ref.read(recordingPathProvider);
+
     if (path != null) {
       try {
         // Stop and clear the player first
@@ -392,16 +483,25 @@ class AudioMessagesHandler {
           await player.stop();
         }
 
-        // Clear the audio source safely
+        // Clear the audio source safely with proper error handling
         try {
-          await player.setUrl(''); // Clear with empty URL instead of empty path
-        } catch (e) {}
+          await player.setUrl(
+            'about:blank',
+          ); // Use safe URL instead of empty string
+        } catch (e) {
+          // Log clear error for debugging
+          log('Player clear error: $e', name: 'AudioMessagesHandler');
+        }
 
+        // Delete the physical file
         final file = io.File(path);
         if (await file.exists()) {
           await file.delete();
         }
-      } catch (e) {}
+      } catch (e) {
+        // Log file operations errors for debugging
+        log('File deletion error: $e', name: 'AudioMessagesHandler');
+      }
     }
 
     // Reset all states
@@ -445,6 +545,7 @@ class AudioMessagesHandler {
       final path = '${voiceDir.path}/voice_${userId}_$timestamp.m4a';
       return path;
     } catch (e) {
+      log('Get recording path error: $e', name: 'AudioMessagesHandler');
       return '';
     }
   }
@@ -460,9 +561,18 @@ class AudioMessagesHandler {
   // Method to dispose resources
   Future<void> dispose() async {
     try {
+      // Stop playback first
       if (player.playing) {
         await player.stop();
       }
+
+      // Clear audio source to prevent MediaCodec issues
+      try {
+        await player.setUrl('about:blank'); // Use a safe URL instead of empty
+      } catch (e) {
+        // Handle clear error silently
+      }
+
       // Reset providers to safe values before disposing
       if (context.mounted) {
         ref.read(recordingPathProvider.notifier).state = null;
@@ -471,108 +581,59 @@ class AudioMessagesHandler {
         ref.read(durationProvider.notifier).state = Duration.zero;
       }
 
+      // Dispose the player
       await player.dispose();
-    } catch (e) {}
+    } catch (e) {
+      // Log dispose errors for debugging
+      log('Audio handler dispose error: $e', name: 'AudioMessagesHandler');
+    }
   }
 
   // Send push notification to receiver when audio message is sent
   Future<void> _sendPushNotificationToReceiver(Message message) async {
     try {
-      developer.log(
-        '🎵 [AudioMessages] ========== STARTING AUDIO PUSH NOTIFICATION PROCESS ==========',
-      );
-      developer.log('🎵 [AudioMessages] Message ID: ${message.id}');
-      developer.log('🎵 [AudioMessages] Message status: ${message.status}');
-      developer.log('🎵 [AudioMessages] Receiver ID: ${contact.uid}');
-      developer.log('🎵 [AudioMessages] Audio ID: ${message.audioId}');
-
-      // Get receiver's FCM token from Firestore
-      developer.log(
-        '🎵 [AudioMessages] Step 1: Fetching receiver FCM token from Firestore...',
-      );
       final receiverDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(contact.uid)
           .get();
 
       if (!receiverDoc.exists) {
-        developer.log(
-          '🎵 [AudioMessages] ERROR: Receiver document does not exist in Firestore',
-        );
         return;
       }
 
       final receiverData = receiverDoc.data();
-      developer.log(
-        '🎵 [AudioMessages] Step 1: Receiver document data keys: ${receiverData?.keys.toList()}',
-      );
-
       final receiverToken = receiverData?['fcmToken'] as String?;
-      developer.log(
-        '🎵 [AudioMessages] Step 1: Receiver FCM token: ${receiverToken?.substring(0, 20)}...',
-      );
-
       if (receiverToken == null || receiverToken.isEmpty) {
-        developer.log(
-          '🎵 [AudioMessages] ERROR: Receiver FCM token is null or empty',
-        );
         return;
       }
 
-      // Get sender's name from Firestore
-      developer.log(
-        '🎵 [AudioMessages] Step 2: Fetching sender info from Firestore...',
-      );
       final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        developer.log('🎵 [AudioMessages] ERROR: Current user is null');
-        return;
-      }
 
-      developer.log(
-        '🎵 [AudioMessages] Step 2: Current user ID: ${currentUser.uid}',
-      );
+      if (currentUser != null) {
+        // ✅ FIXED: Changed from == null to != null
+        final senderDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get();
 
-      final senderDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .get();
+        if (!senderDoc.exists) {
+          return;
+        }
 
-      if (!senderDoc.exists) {
-        developer.log(
-          '🎵 [AudioMessages] ERROR: Sender document does not exist in Firestore',
+        final senderData = senderDoc.data();
+        final senderName = senderData?['name'] as String? ?? 'Someone';
+
+        final notificationService = NotificationService();
+
+        await notificationService.sendPushNotification(
+          deviceToken: receiverToken,
+          title: senderName,
+          body: '🎵 Voice message',
         );
-        return;
       }
-
-      final senderData = senderDoc.data();
-      developer.log(
-        '🎵 [AudioMessages] Step 2: Sender document data keys: ${senderData?.keys.toList()}',
-      );
-
-      final senderName = senderData?['name'] as String? ?? 'Someone';
-      developer.log('🎵 [AudioMessages] Step 2: Sender name: $senderName');
-
-      // Send push notification
-      developer.log(
-        '🎵 [AudioMessages] Step 3: Calling NotificationService.sendPushNotification...',
-      );
-      final notificationService = NotificationService();
-      await notificationService.sendPushNotification(
-        deviceToken: receiverToken,
-        title: senderName,
-        body: '🎵 Voice message',
-      );
-
-      developer.log(
-        '🎵 [AudioMessages] ✅ SUCCESS: Audio push notification process completed successfully!',
-      );
     } catch (e) {
-      developer.log(
-        '🎵 [AudioMessages] ❌ ERROR in _sendPushNotificationToReceiver: $e',
-      );
-      developer.log('🎵 [AudioMessages] Error type: ${e.runtimeType}');
-      // Silently handle errors - notification failure shouldn't break chat
+      // Log notification errors for debugging but don't fail the operation
+      log('Failed to send push notification: $e', name: 'AudioMessagesHandler');
     }
   }
 }

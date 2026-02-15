@@ -85,7 +85,7 @@ class _GoogleAuthenticationState extends ConsumerState<GoogleAuthentication> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Request not completed: $e'),
+          content: Text('Request not completed \n$e'),
           backgroundColor: Colors.red,
         ),
       );

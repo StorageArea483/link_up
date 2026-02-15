@@ -15,11 +15,21 @@ import 'package:link_up/models/user_contacts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 
-class LandingPage extends ConsumerWidget {
+class LandingPage extends ConsumerStatefulWidget {
   const LandingPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LandingPage> createState() => _LandingPageState();
+}
+
+class _LandingPageState extends ConsumerState<LandingPage> {
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final phoneAsync = ref.watch(userPhoneNumberProvider);
     return Scaffold(
       backgroundColor: AppColors.background,

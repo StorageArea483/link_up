@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +24,7 @@ import 'package:gal/gal.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:link_up/config/appwrite_client.dart';
+import 'package:link_up/services/notification_service.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final UserContacts contact;
@@ -810,6 +812,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         // NEW: Save the sent message to SQLite immediately
         await SqfliteHelper.insertMessage(newMessage);
 
+        // Send push notification when message status is "sent"
+        if (newMessage.status == 'sent') {
+          _sendPushNotificationToReceiver(newMessage);
+        }
+
         // Import the providers and invalidate them for this contact
         // This ensures the sender's chat list updates immediately
 
@@ -825,6 +832,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         isTyping: false,
       );
     } catch (e) {}
+  }
+
+  // Send push notification to receiver when message is sent
+  Future<void> _sendPushNotificationToReceiver(Message message) async {
+    try {
+      // Get receiver's FCM token from Firestore
+      final receiverDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.contact.uid)
+          .get();
+
+      if (!receiverDoc.exists) return;
+
+      final receiverData = receiverDoc.data();
+      final receiverToken = receiverData?['fcmToken'] as String?;
+
+      if (receiverToken == null || receiverToken.isEmpty) return;
+
+      // Get sender's name from Firestore
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final senderDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (!senderDoc.exists) return;
+
+      final senderData = senderDoc.data();
+      final senderName = senderData?['name'] as String? ?? 'Someone';
+
+      // Send push notification
+      final notificationService = NotificationService();
+
+      // Determine the message body based on message type
+      String notificationBody;
+      if (message.imageId != null) {
+        notificationBody = '📷 Photo';
+      } else if (message.audioId != null) {
+        notificationBody = '🎵 Voice message';
+      } else if (message.text.isNotEmpty) {
+        notificationBody = message.text;
+      } else {
+        notificationBody = 'Sent a message';
+      }
+
+      await notificationService.sendPushNotification(
+        deviceToken: receiverToken,
+        title: senderName,
+        body: notificationBody,
+      );
+    } catch (e) {
+      // Silently handle errors - notification failure shouldn't break chat
+    }
   }
 
   void _onTypingChanged(String text) {

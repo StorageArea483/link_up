@@ -310,7 +310,7 @@ class _UserChatsState extends ConsumerState<UserChats> {
                                     fontSize: 14,
                                   ),
                                 ),
-                                error: (_, __) => Text(
+                                error: (_, _) => Text(
                                   'No messages yet',
                                   style: AppTextStyles.subtitle.copyWith(
                                     fontSize: 14,

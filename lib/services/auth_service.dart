@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:link_up/services/notification_service.dart';
 
 // Google Sign-In Service Class
 class GoogleSignInService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
-  static final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
+  static final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: <String>['email'],
+  );
 
   // Sign in with Google
   static Future<UserCredential?> signInWithGoogle() async {
@@ -44,6 +47,10 @@ class GoogleSignInService {
             'provider': 'google',
           });
         }
+
+        // Save FCM notification token to database
+        final notificationService = NotificationService();
+        await notificationService.saveTokenToDatabase(user.uid);
       }
       return userCredential;
     } catch (e) {

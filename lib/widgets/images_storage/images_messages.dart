@@ -1,5 +1,7 @@
 import 'dart:io' as io;
 import 'package:appwrite/appwrite.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +14,7 @@ import 'package:link_up/models/user_contacts.dart';
 import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/services/chat_service.dart';
+import 'package:link_up/services/notification_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/database/sqflite_helper.dart';
 
@@ -141,6 +144,11 @@ class ImageMessagesHandler {
 
         await SqfliteHelper.insertMessage(newMessage);
 
+        // Send push notification when image message status is "sent"
+        if (newMessage.status == 'sent') {
+          _sendPushNotificationToReceiver(newMessage);
+        }
+
         if (context.mounted) {
           Navigator.pop(context);
           _showSnackBar('Image uploaded successfully', Colors.green);
@@ -190,6 +198,48 @@ class ImageMessagesHandler {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message), backgroundColor: backgroundColor),
       );
+    }
+  }
+
+  // Send push notification to receiver when image message is sent
+  Future<void> _sendPushNotificationToReceiver(Message message) async {
+    try {
+      // Get receiver's FCM token from Firestore
+      final receiverDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(contact.uid)
+          .get();
+
+      if (!receiverDoc.exists) return;
+
+      final receiverData = receiverDoc.data();
+      final receiverToken = receiverData?['fcmToken'] as String?;
+
+      if (receiverToken == null || receiverToken.isEmpty) return;
+
+      // Get sender's name from Firestore
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final senderDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (!senderDoc.exists) return;
+
+      final senderData = senderDoc.data();
+      final senderName = senderData?['name'] as String? ?? 'Someone';
+
+      // Send push notification
+      final notificationService = NotificationService();
+      await notificationService.sendPushNotification(
+        deviceToken: receiverToken,
+        title: senderName,
+        body: '📷 Photo',
+      );
+    } catch (e) {
+      // Silently handle errors - notification failure shouldn't break chat
     }
   }
 }

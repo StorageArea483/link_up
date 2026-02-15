@@ -1,5 +1,7 @@
 import 'dart:io' as io;
 import 'package:appwrite/appwrite.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
@@ -8,6 +10,7 @@ import 'package:link_up/models/message.dart';
 import 'package:link_up/models/user_contacts.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/services/chat_service.dart';
+import 'package:link_up/services/notification_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:link_up/providers/chat_providers.dart';
@@ -268,6 +271,11 @@ class AudioMessagesHandler {
         // NEW: Save the sent message to SQLite immediately
         await SqfliteHelper.insertMessage(newMessage);
 
+        // Send push notification when audio message status is "sent"
+        if (newMessage.status == 'sent') {
+          _sendPushNotificationToReceiver(newMessage);
+        }
+
         if (context.mounted) {
           Navigator.pop(context); // Close uploading dialog
           _showSnackBar('Audio sent successfully', Colors.green);
@@ -457,6 +465,48 @@ class AudioMessagesHandler {
 
       await player.dispose();
     } catch (e) {}
+  }
+
+  // Send push notification to receiver when audio message is sent
+  Future<void> _sendPushNotificationToReceiver(Message message) async {
+    try {
+      // Get receiver's FCM token from Firestore
+      final receiverDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(contact.uid)
+          .get();
+
+      if (!receiverDoc.exists) return;
+
+      final receiverData = receiverDoc.data();
+      final receiverToken = receiverData?['fcmToken'] as String?;
+
+      if (receiverToken == null || receiverToken.isEmpty) return;
+
+      // Get sender's name from Firestore
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final senderDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (!senderDoc.exists) return;
+
+      final senderData = senderDoc.data();
+      final senderName = senderData?['name'] as String? ?? 'Someone';
+
+      // Send push notification
+      final notificationService = NotificationService();
+      await notificationService.sendPushNotification(
+        deviceToken: receiverToken,
+        title: senderName,
+        body: '🎵 Voice message',
+      );
+    } catch (e) {
+      // Silently handle errors - notification failure shouldn't break chat
+    }
   }
 }
 

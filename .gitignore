@@ -66,3 +66,6 @@ app.*.map.json
 android/app/debug/
 android/app/profile/
 android/app/release/
+
+*.env
+secrets/link-up-data-987c1-4687688fe13e.json

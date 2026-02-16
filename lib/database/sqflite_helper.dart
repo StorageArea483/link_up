@@ -29,7 +29,7 @@ class SqfliteHelper {
       _database = await _initDatabase();
       return _database!;
     } catch (e) {
-      log('Failed to initialize database: $e', name: 'SqfliteHelper');
+      log('Database initialization failed: $e', name: 'SqfliteHelper');
       rethrow;
     }
   }
@@ -46,7 +46,7 @@ class SqfliteHelper {
         onCreate: _onCreate,
       );
     } catch (e) {
-      log('Failed to initialize database: $e', name: 'SqfliteHelper');
+      log('Database setup failed: $e', name: 'SqfliteHelper');
       rethrow;
     }
   }
@@ -69,7 +69,7 @@ class SqfliteHelper {
         )
       ''');
     } catch (e) {
-      log('Failed to create database table: $e', name: 'SqfliteHelper');
+      log('Database table creation failed: $e', name: 'SqfliteHelper');
       rethrow;
     }
   }
@@ -92,7 +92,7 @@ class SqfliteHelper {
 
       return true;
     } catch (e) {
-      log('Failed to insert message: $e', name: 'SqfliteHelper');
+      // Return false on insert failure - caller can handle appropriately
       return false;
     }
   }
@@ -124,7 +124,7 @@ class SqfliteHelper {
         );
       }).toList();
     } catch (e) {
-      log('Failed to get last message: $e', name: 'SqfliteHelper');
+      // Return empty list on query failure
       return [];
     }
   }
@@ -155,7 +155,7 @@ class SqfliteHelper {
         );
       }).toList();
     } catch (e) {
-      log('Failed to get delivered messages: $e', name: 'SqfliteHelper');
+      // Return empty list on query failure
       return [];
     }
   }
@@ -178,7 +178,7 @@ class SqfliteHelper {
       );
       return result.isNotEmpty;
     } catch (e) {
-      log('Failed to check message existence: $e', name: 'SqfliteHelper');
+      // Return false on query failure
       return false;
     }
   }
@@ -193,7 +193,7 @@ class SqfliteHelper {
         whereArgs: [chatId],
       );
     } catch (e) {
-      log('Failed to clear chat messages: $e', name: 'SqfliteHelper');
+      // Silent failure for cleanup operations
     }
   }
 
@@ -204,7 +204,7 @@ class SqfliteHelper {
       await db.close();
       _database = null;
     } catch (e) {
-      log('Failed to close database: $e', name: 'SqfliteHelper');
+      // Silent failure for cleanup operations
     }
   }
 }

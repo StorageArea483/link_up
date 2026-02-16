@@ -1,4 +1,3 @@
-import 'dart:developer';
 import 'dart:io' as io;
 import 'package:appwrite/appwrite.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -54,13 +53,11 @@ class AudioMessagesHandler {
             _isAudioCompleted = false;
           }
         } catch (e) {
-          // Log player state errors for debugging
-          log('Player state error: $e', name: 'AudioMessagesHandler');
+          // Silent failure - player state errors are not critical
         }
       },
       onError: (error) {
-        // Log player state stream errors for debugging
-        log('Player state stream error: $error', name: 'AudioMessagesHandler');
+        // Silent failure - player state stream errors are not critical
       },
     );
 
@@ -71,13 +68,11 @@ class AudioMessagesHandler {
           if (!context.mounted || _isAudioCompleted) return;
           ref.read(positionProvider.notifier).state = position;
         } catch (e) {
-          // Log position update errors for debugging
-          log('Position update error: $e', name: 'AudioMessagesHandler');
+          // Silent failure - position update errors are not critical
         }
       },
       onError: (error) {
-        // Log position stream errors for debugging
-        log('Position stream error: $error', name: 'AudioMessagesHandler');
+        // Silent failure - position stream errors are not critical
       },
     );
 
@@ -90,13 +85,11 @@ class AudioMessagesHandler {
             ref.read(durationProvider.notifier).state = duration;
           }
         } catch (e) {
-          // Log duration update errors for debugging
-          log('Duration update error: $e', name: 'AudioMessagesHandler');
+          // Silent failure - duration update errors are not critical
         }
       },
       onError: (error) {
-        // Log duration stream errors for debugging
-        log('Duration stream error: $error', name: 'AudioMessagesHandler');
+        // Silent failure - duration stream errors are not critical
       },
     );
   }
@@ -138,7 +131,6 @@ class AudioMessagesHandler {
         }
       }
     } catch (e) {
-      log('Recording start error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
         ref.read(toggleRecordingProvider.notifier).state = false;
         _showSnackBar(
@@ -200,7 +192,6 @@ class AudioMessagesHandler {
         }
       }
     } catch (e) {
-      log('Recording stop error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
         ref.read(toggleRecordingProvider.notifier).state = false;
         _showSnackBar(
@@ -368,7 +359,6 @@ class AudioMessagesHandler {
 
       return true;
     } catch (e) {
-      log('Send audio error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
         Navigator.pop(context);
         _showSnackBar(
@@ -423,15 +413,13 @@ class AudioMessagesHandler {
             await player.stop();
           }
         } catch (e) {
-          // Log stop error for debugging
-          log('Player stop error: $e', name: 'AudioMessagesHandler');
+          // Silent failure - player stop errors are not critical
         }
 
         // Set the audio source with proper error handling
         try {
           await player.setFilePath(recordingPath);
         } catch (e) {
-          log('Audio file load error: $e', name: 'AudioMessagesHandler');
           if (context.mounted) {
             _showSnackBar(
               'Unable to load audio file. Please try again.',
@@ -450,7 +438,6 @@ class AudioMessagesHandler {
         await player.play();
       }
     } catch (e) {
-      log('Audio playback error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
         ref.read(isPlayingPreviewProvider.notifier).state = false;
         _showSnackBar('Unable to play audio. Please try again.', Colors.red);
@@ -464,7 +451,6 @@ class AudioMessagesHandler {
       _isAudioCompleted = false;
       await player.seek(Duration(seconds: value.toInt()));
     } catch (e) {
-      log('Audio seek error: $e', name: 'AudioMessagesHandler');
       if (context.mounted) {
         _showSnackBar('Unable to seek audio position', Colors.red);
       }
@@ -473,6 +459,10 @@ class AudioMessagesHandler {
 
   Future<void> deleteRecording() async {
     if (!context.mounted) return;
+
+    if (context.mounted) {
+      _showUploadingDialog();
+    }
 
     final path = ref.read(recordingPathProvider);
 
@@ -485,12 +475,9 @@ class AudioMessagesHandler {
 
         // Clear the audio source safely with proper error handling
         try {
-          await player.setUrl(
-            'about:blank',
-          ); // Use safe URL instead of empty string
+          await player.setUrl(''); // Use safe URL instead of empty string
         } catch (e) {
-          // Log clear error for debugging
-          log('Player clear error: $e', name: 'AudioMessagesHandler');
+          // Silent failure - player clear errors are not critical
         }
 
         // Delete the physical file
@@ -499,11 +486,10 @@ class AudioMessagesHandler {
           await file.delete();
         }
       } catch (e) {
-        // Log file operations errors for debugging
-        log('File deletion error: $e', name: 'AudioMessagesHandler');
+        // Silent failure - file operations errors are not critical
       }
     }
-
+    Navigator.pop(context);
     // Reset all states
     _isAudioCompleted = false; // Reset the completed flag
     if (context.mounted) {
@@ -545,7 +531,6 @@ class AudioMessagesHandler {
       final path = '${voiceDir.path}/voice_${userId}_$timestamp.m4a';
       return path;
     } catch (e) {
-      log('Get recording path error: $e', name: 'AudioMessagesHandler');
       return '';
     }
   }
@@ -584,8 +569,7 @@ class AudioMessagesHandler {
       // Dispose the player
       await player.dispose();
     } catch (e) {
-      // Log dispose errors for debugging
-      log('Audio handler dispose error: $e', name: 'AudioMessagesHandler');
+      // Silent failure - dispose errors are not critical
     }
   }
 
@@ -632,8 +616,7 @@ class AudioMessagesHandler {
         );
       }
     } catch (e) {
-      // Log notification errors for debugging but don't fail the operation
-      log('Failed to send push notification: $e', name: 'AudioMessagesHandler');
+      // Silent failure - push notification failure is not critical for audio sending
     }
   }
 }

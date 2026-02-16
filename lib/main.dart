@@ -30,6 +30,7 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (e) {
+    // Firebase initialization failure is critical - log for debugging
     log('Firebase initialization failed: $e', name: 'Main');
   }
 
@@ -40,6 +41,7 @@ void main() async {
   try {
     await NotificationService.initialize();
   } catch (e) {
+    // Notification service failure is critical - log for debugging
     log('Notification service initialization failed: $e', name: 'Main');
   }
 

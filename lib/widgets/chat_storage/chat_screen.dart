@@ -131,16 +131,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         );
       }
     } catch (e) {
-      // Log typing cleanup error but don't prevent disposal
-      log('Failed to clear typing status on dispose: $e', name: 'ChatScreen');
+      // Silent cleanup failure - disposal should not be prevented
     }
 
     try {
       _record.dispose();
       _audioHandler.dispose();
     } catch (e) {
-      // Log audio cleanup error but don't prevent disposal
-      log('Failed to dispose audio components: $e', name: 'ChatScreen');
+      // Silent cleanup failure - disposal should not be prevented
     }
 
     super.dispose();
@@ -183,7 +181,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       typingSubscription = null;
       presenceSubscription = null;
     } catch (e) {
-      log('Failed to handle app detached: $e', name: 'ChatScreen');
+      // Silent cleanup failure - app is terminating
     }
   }
 
@@ -202,10 +200,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         typingSubscription?.resume();
         presenceSubscription?.resume();
       } catch (e) {
-        log(
-          'Failed to resume subscriptions, will re-establish: $e',
-          name: 'ChatScreen',
-        );
         // If resume fails, subscriptions might be dead, so re-establish them
         messageSubscription = null;
         typingSubscription = null;
@@ -235,7 +229,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       // Check contact's current presence
       await _checkUserPresence();
     } catch (e) {
-      log('Failed to handle app resume: $e', name: 'ChatScreen');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unable to restore chat connections. Please restart the app.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -254,7 +257,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       typingSubscription?.pause();
       presenceSubscription?.pause();
     } catch (e) {
-      log('Failed to handle app pause: $e', name: 'ChatScreen');
+      // Silent failure for resource cleanup
     }
   }
 
@@ -294,7 +297,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       try {
         await ChatService.updatePresence(userId: userId, online: true);
       } catch (e) {
-        log('Failed to update user presence: $e', name: 'ChatScreen');
         // Continue initialization even if presence update fails
       }
 
@@ -312,7 +314,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       // Mark messages as delivered
       await _markMessagesAsDeliveredAndUpdate(userId);
     } catch (e) {
-      log('Chat initialization failed: $e', name: 'ChatScreen');
       if (mounted) {
         ref.read(isLoadingChatScreenProvider.notifier).state = false;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -385,12 +386,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             if (!mounted) return;
             ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
           } catch (e) {
-            log('Failed to load offline messages: $e', name: 'ChatScreen');
+            // Silent failure - offline messages will be loaded on demand
           }
         }
       }
     } catch (e) {
-      log('Failed to mark messages as delivered: $e', name: 'ChatScreen');
       // On error, ensure we still have offline messages if current list is empty
       if (mounted) {
         final chatId = ref.read(chatIdProvider);
@@ -405,10 +405,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ref.read(messagesProvider(chatId).notifier).state =
                   offlineMessages;
             } catch (e) {
-              log(
-                'Failed to load offline messages as fallback: $e',
-                name: 'ChatScreen',
-              );
+              // Silent fallback failure
             }
           }
         }
@@ -486,7 +483,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           try {
             await SqfliteHelper.insertMessage(msg);
           } catch (e) {
-            log('Failed to save message to SQLite: $e', name: 'ChatScreen');
             // Continue with other messages even if one fails
           }
         }
@@ -497,7 +493,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         return true;
       }
     } catch (e) {
-      log('Failed to load messages: $e', name: 'ChatScreen');
       if (!mounted) return false;
       final chatId = ref.read(chatIdProvider);
       if (chatId == null) return false;
@@ -512,12 +507,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ref.read(isLoadingChatScreenProvider.notifier).state = false;
           }
         } catch (e) {
-          log(
-            'Failed to load offline messages as fallback: $e',
-            name: 'ChatScreen',
-          );
           if (mounted) {
             ref.read(isLoadingChatScreenProvider.notifier).state = false;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Unable to load messages. Please check your connection.',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
           }
         }
       }
@@ -579,10 +578,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               try {
                 _markSingleMessageAsDelivered(newMessage.id);
               } catch (e) {
-                log(
-                  'Failed to mark message as delivered: $e',
-                  name: 'ChatScreen',
-                );
+                // Silent failure - message delivery status update is not critical for UI
               }
             }
 
@@ -591,7 +587,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             }
           }
         } catch (e) {
-          log('Failed to process incoming message: $e', name: 'ChatScreen');
+          // Silent failure - message processing errors are handled gracefully
         }
       });
 
@@ -600,7 +596,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         name: 'ChatScreen',
       );
     } catch (e) {
-      log('Failed to setup message subscription: $e', name: 'ChatScreen');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unable to connect to chat service. Please check your connection.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -612,10 +617,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         try {
           await SqfliteHelper.insertMessage(message);
         } catch (e) {
-          log(
-            'Failed to save delivered message to SQLite: $e',
-            name: 'ChatScreen',
-          );
+          // Silent failure - message saving is not critical for UI functionality
         }
       }
 
@@ -632,7 +634,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         }
       }
     } catch (e) {
-      log('Failed to handle delivered message: $e', name: 'ChatScreen');
+      // Silent failure - message delivery handling is not critical for UI
     }
   }
 
@@ -678,10 +680,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           // Delete message document from Appwrite Database
           await ChatService.deleteMessageFromAppwrite(message.id);
         } catch (e) {
-          log(
-            'Failed to cleanup image from cloud storage: $e',
-            name: 'ChatScreen',
-          );
+          // Silent cleanup failure - not critical for user experience
         }
         return;
       }
@@ -693,7 +692,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       try {
         await Dio().download(imageUrl, savePath);
       } catch (e) {
-        log('Failed to download image: $e', name: 'ChatScreen');
         // Set loading to false on download error
         if (mounted) {
           ref
@@ -705,6 +703,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   )
                   .state =
               false;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Unable to download image. Please check your connection.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
         return;
       }
@@ -735,13 +741,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         // Delete message document from Appwrite Database
         await ChatService.deleteMessageFromAppwrite(message.id);
       } catch (e) {
-        log(
-          'Failed to save image to gallery or cleanup cloud storage: $e',
-          name: 'ChatScreen',
-        );
+        // Silent cleanup failure - not critical for user experience
       }
     } catch (e) {
-      log('Failed to handle image delivery: $e', name: 'ChatScreen');
       // Set loading to false even on error
       if (mounted) {
         ref
@@ -753,6 +755,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 )
                 .state =
             false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to process image. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -812,10 +820,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           // Delete message document from Appwrite Database
           await ChatService.deleteMessageFromAppwrite(message.id);
         } catch (e) {
-          log(
-            'Failed to cleanup audio from cloud storage: $e',
-            name: 'ChatScreen',
-          );
+          // Silent cleanup failure - not critical for user experience
         }
         return;
       }
@@ -827,7 +832,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       try {
         await Dio().download(audioUrl, savePath);
       } catch (e) {
-        log('Failed to download audio: $e', name: 'ChatScreen');
         // Set loading to false and error to true on download failure
         if (mounted) {
           ref
@@ -845,6 +849,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   )
                   .state =
               true;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Unable to download audio. Please check your connection.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
         return;
       }
@@ -882,13 +894,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         // Delete message document from Appwrite Database
         await ChatService.deleteMessageFromAppwrite(message.id);
       } catch (e) {
-        log(
-          'Failed to cleanup audio from cloud storage: $e',
-          name: 'ChatScreen',
-        );
+        // Silent cleanup failure - not critical for user experience
       }
     } catch (e) {
-      log('Failed to handle audio delivery: $e', name: 'ChatScreen');
       // Set loading to false and error to true on failure
       if (mounted) {
         ref
@@ -904,6 +912,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 .read(audioErrorProvider((message.audioId!, _chatId)).notifier)
                 .state =
             true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to process audio. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -943,7 +957,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         }
       }
     } catch (e) {
-      log('Failed to mark single message as delivered: $e', name: 'ChatScreen');
+      // Silent failure - message delivery status update is not critical for UI
     }
   }
 
@@ -967,7 +981,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 response.payload['isTyping'] ?? false;
           }
         } catch (e) {
-          log('Failed to process typing indicator: $e', name: 'ChatScreen');
+          // Silent failure - typing indicator errors are not critical
         }
       });
 
@@ -976,7 +990,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         name: 'ChatScreen',
       );
     } catch (e) {
-      log('Failed to setup typing subscription: $e', name: 'ChatScreen');
+      // Silent failure - typing subscription is not critical for core functionality
     }
   }
 
@@ -1013,14 +1027,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             try {
               _markMessagesAsDeliveredAndUpdate(widget.contact.uid);
             } catch (e) {
-              log(
-                'Failed to mark messages as delivered on presence change: $e',
-                name: 'ChatScreen',
-              );
+              // Silent failure - message delivery status update is not critical
             }
           }
         } catch (e) {
-          log('Failed to process presence update: $e', name: 'ChatScreen');
+          // Silent failure - presence update errors are not critical
         }
       });
 
@@ -1029,7 +1040,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         name: 'ChatScreen',
       );
     } catch (e) {
-      log('Failed to setup presence subscription: $e', name: 'ChatScreen');
+      // Silent failure - presence subscription is not critical for core functionality
     }
   }
 
@@ -1068,7 +1079,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         try {
           await _audioHandler.sendAudioMessage();
         } catch (e) {
-          log('Failed to send audio message: $e', name: 'ChatScreen');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -1130,7 +1140,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         try {
           await SqfliteHelper.insertMessage(newMessage);
         } catch (e) {
-          log('Failed to save sent message to SQLite: $e', name: 'ChatScreen');
+          // Silent failure - message saving is not critical for UI functionality
         }
 
         // Send push notification when message status is "sent"
@@ -1138,7 +1148,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           try {
             _sendPushNotificationToReceiver(newMessage);
           } catch (e) {
-            log('Failed to send push notification: $e', name: 'ChatScreen');
+            // Silent failure - push notification failure is not critical for message sending
           }
         }
 
@@ -1146,10 +1156,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           if (!mounted) return;
           ref.invalidate(lastMessageProvider(widget.contact.uid));
         } catch (e) {
-          log(
-            'Failed to invalidate last message provider: $e',
-            name: 'ChatScreen',
-          );
+          // Silent failure - provider invalidation is not critical
         }
       } else if (mounted) {
         // Message failed to send
@@ -1168,14 +1175,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           isTyping: false,
         );
       } catch (e) {
-        log('Failed to clear typing status: $e', name: 'ChatScreen');
+        // Silent failure - typing status cleanup is not critical
       }
     } catch (e) {
-      log('Failed to send message: $e', name: 'ChatScreen');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Message failed to send. Please try again.'),
+            content: Text('Unable to send message. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1235,7 +1241,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         body: notificationBody,
       );
     } catch (e) {
-      log('Failed to send push notification: $e', name: 'ChatScreen');
+      // Silent failure - push notification failure is not critical for message sending
     }
   }
 
@@ -1262,7 +1268,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         );
       }
     } catch (e) {
-      log('Failed to update typing status: $e', name: 'ChatScreen');
+      // Silent failure - typing status update is not critical
     }
   }
 
@@ -1320,10 +1326,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           typingSubscription?.resume();
           presenceSubscription?.resume();
         } catch (e) {
-          log(
-            'Failed to resume subscriptions, will re-establish: $e',
-            name: 'ChatScreen',
-          );
           // If resume fails, re-establish subscriptions
           _subscribeToMessages();
           _subscribeToTyping();
@@ -1345,10 +1347,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         try {
           ChatService.updatePresence(userId: _currentUserId!, online: true);
         } catch (e) {
-          log(
-            'Failed to update presence on reconnection: $e',
-            name: 'ChatScreen',
-          );
+          // Silent failure - presence update is not critical
         }
 
         if (!mounted) return;
@@ -1358,10 +1357,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           try {
             _markMessagesAsDeliveredAndUpdate(_currentUserId!);
           } catch (e) {
-            log(
-              'Failed to mark messages as delivered on reconnection: $e',
-              name: 'ChatScreen',
-            );
+            // Silent failure - message delivery status update is not critical
           }
         }
 
@@ -1380,10 +1376,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     offlineMessages;
               }
             } catch (e) {
-              log(
-                'Failed to load offline messages on reconnection: $e',
-                name: 'ChatScreen',
-              );
+              // Silent failure - offline message loading is not critical
             }
           }
         }
@@ -1392,19 +1385,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         try {
           _reloadMessagesAfterReconnection();
         } catch (e) {
-          log(
-            'Failed to reload messages after reconnection: $e',
-            name: 'ChatScreen',
-          );
+          // Silent failure - message reloading is not critical
         }
 
         try {
           _checkUserPresence();
         } catch (e) {
-          log(
-            'Failed to check user presence on reconnection: $e',
-            name: 'ChatScreen',
-          );
+          // Silent failure - presence check is not critical
         }
       } else {
         log('Network disconnected - pausing subscriptions', name: 'ChatScreen');
@@ -1420,7 +1407,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         }
       }
     } catch (e) {
-      log('Failed to handle connectivity change: $e', name: 'ChatScreen');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Connection issue detected. Some features may be limited.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     }
   }
 

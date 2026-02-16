@@ -129,8 +129,7 @@ class ImageMessagesHandler {
           }
         }
       } catch (e) {
-        // Log local save errors but don't fail the operation
-        log('Failed to save image locally: $e', name: 'ImageMessagesHandler');
+        // Silent failure - local save errors don't prevent message sending
       }
 
       // 🔥 Send message
@@ -178,7 +177,6 @@ class ImageMessagesHandler {
         return false;
       }
     } catch (e) {
-      log('Error in pickAndSendImage: $e', name: 'ImageMessagesHandler');
       if (context.mounted) {
         Navigator.pop(context);
         _showSnackBar(
@@ -260,8 +258,7 @@ class ImageMessagesHandler {
         body: '📷 Photo',
       );
     } catch (e) {
-      // Log notification errors for debugging but don't fail the operation
-      log('Failed to send push notification: $e', name: 'ImageMessagesHandler');
+      // Silent failure - push notification failure is not critical for image sending
     }
   }
 }

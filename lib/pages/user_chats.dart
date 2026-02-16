@@ -77,7 +77,7 @@ class _UserChatsState extends ConsumerState<UserChats>
       // Set subscriptions to null so they can be re-established if needed
       messageSubscription = null;
     } catch (e) {
-      log('Failed to handle app detached: $e', name: 'UserChats');
+      // Silent cleanup failure - app is terminating
     }
   }
 
@@ -106,12 +106,11 @@ class _UserChatsState extends ConsumerState<UserChats>
               ref.invalidate(unreadCountProvider(contact.uid));
             }
           } catch (e) {
-            log('Failed to handle app resumed: $e', name: 'UserChats');
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text(
-                    'Failed to refresh chat data. Please restart the app.',
+                    'Unable to refresh chat data. Please restart the app.',
                   ),
                   backgroundColor: Colors.red,
                 ),
@@ -121,12 +120,11 @@ class _UserChatsState extends ConsumerState<UserChats>
         }
       }
     } catch (e) {
-      log('Failed to handle app resume: $e', name: 'UserChats');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Failed to restore chat connections. Please restart the app.',
+              'Unable to restore chat connections. Please restart the app.',
             ),
             backgroundColor: Colors.red,
           ),
@@ -146,7 +144,7 @@ class _UserChatsState extends ConsumerState<UserChats>
       // They will be resumed when app comes back to foreground
       messageSubscription?.pause();
     } catch (e) {
-      log('Failed to handle app pause: $e', name: 'UserChats');
+      // Silent failure for resource cleanup
     }
   }
 
@@ -183,17 +181,15 @@ class _UserChatsState extends ConsumerState<UserChats>
           }
         } catch (e) {
           // Handle parsing errors silently - these are expected for malformed messages
-          log('Failed to parse realtime message: $e', name: 'UserChats');
         }
       });
     } catch (e) {
-      log('Failed to setup message subscription: $e', name: 'UserChats');
       messageSubscription?.cancel();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Failed to connect to chat service. Please check your connection.',
+              'Unable to connect to chat service. Please check your connection.',
             ),
             backgroundColor: Colors.red,
           ),
@@ -215,7 +211,6 @@ class _UserChatsState extends ConsumerState<UserChats>
         messageSubscription?.resume();
       }
     } catch (e) {
-      log('Failed to check network connectivity: $e', name: 'UserChats');
       // Continue initialization even if connectivity check fails
     }
 
@@ -233,7 +228,6 @@ class _UserChatsState extends ConsumerState<UserChats>
           ref.read(unreadCountProvider(contact.uid));
         }
       } catch (e) {
-        log('Failed to pre-load contact data: $e', name: 'UserChats');
         // Continue even if pre-loading fails - data will load on demand
       }
     }

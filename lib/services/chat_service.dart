@@ -47,9 +47,12 @@ class ChatService {
         data: data,
       );
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
-        log('Database error in sendMessage: ${e.message}', name: 'ChatService');
+        log(
+          'Critical database error in sendMessage: ${e.message}',
+          name: 'ChatService',
+        );
       }
       return null;
     }
@@ -68,10 +71,10 @@ class ChatService {
       );
       return result;
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
         log(
-          'Database error in getLastMessage: ${e.message}',
+          'Critical database error in getLastMessage: ${e.message}',
           name: 'ChatService',
         );
       }
@@ -92,9 +95,12 @@ class ChatService {
       );
       return result;
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
-        log('Database error in getMessages: ${e.message}', name: 'ChatService');
+        log(
+          'Critical database error in getMessages: ${e.message}',
+          name: 'ChatService',
+        );
       }
       return DocumentList(total: 0, documents: []);
     }
@@ -121,13 +127,13 @@ class ChatService {
               }
             },
             onError: (error) {
-              // Log realtime connection errors for debugging
+              // Only log critical connection errors for debugging
               log('Message subscription error: $error', name: 'ChatService');
             },
             cancelOnError: false,
           );
     } catch (e) {
-      // Log realtime subscription setup errors
+      // Only log critical subscription setup errors for debugging
       log('Failed to setup message subscription: $e', name: 'ChatService');
       return null;
     }
@@ -155,13 +161,13 @@ class ChatService {
               }
             },
             onError: (error) {
-              // Log realtime connection errors for debugging
+              // Only log critical connection errors for debugging
               log('Presence subscription error: $error', name: 'ChatService');
             },
             cancelOnError: false,
           );
     } catch (e) {
-      // Log realtime subscription setup errors
+      // Only log critical subscription setup errors for debugging
       log('Failed to setup presence subscription: $e', name: 'ChatService');
       return null;
     }
@@ -189,7 +195,7 @@ class ChatService {
               }
             },
             onError: (error) {
-              // Log realtime connection errors for debugging
+              // Only log critical connection errors for debugging
               log(
                 'Realtime messages subscription error: $error',
                 name: 'ChatService',
@@ -198,7 +204,7 @@ class ChatService {
             cancelOnError: false,
           );
     } catch (e) {
-      // Log realtime subscription setup errors
+      // Only log critical subscription setup errors for debugging
       log(
         'Failed to setup realtime messages subscription: $e',
         name: 'ChatService',
@@ -240,10 +246,10 @@ class ChatService {
 
       return updatedMessages;
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
         log(
-          'Database error in markMessagesAsDelivered: ${e.message}',
+          'Critical database error in markMessagesAsDelivered: ${e.message}',
           name: 'ChatService',
         );
       }
@@ -260,10 +266,10 @@ class ChatService {
       );
       return true;
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
         log(
-          'Database error in deleteMessageFromAppwrite: ${e.message}',
+          'Critical database error in deleteMessageFromAppwrite: ${e.message}',
           name: 'ChatService',
         );
       }
@@ -283,10 +289,10 @@ class ChatService {
         data: {'status': status},
       );
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
         log(
-          'Database error in updateMessageStatus: ${e.message}',
+          'Critical database error in updateMessageStatus: ${e.message}',
           name: 'ChatService',
         );
       }
@@ -323,9 +329,12 @@ class ChatService {
       }
       return true;
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
-        log('Database error in setTyping: ${e.message}', name: 'ChatService');
+        log(
+          'Critical database error in setTyping: ${e.message}',
+          name: 'ChatService',
+        );
       }
       return false;
     }
@@ -349,13 +358,13 @@ class ChatService {
               }
             },
             onError: (error) {
-              // Log realtime connection errors for debugging
+              // Only log critical connection errors for debugging
               log('Typing subscription error: $error', name: 'ChatService');
             },
             cancelOnError: false,
           );
     } catch (e) {
-      // Log realtime subscription setup errors
+      // Only log critical subscription setup errors for debugging
       log('Failed to setup typing subscription: $e', name: 'ChatService');
       return null;
     }
@@ -391,10 +400,10 @@ class ChatService {
       }
       return true;
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
         log(
-          'Database error in updatePresence: ${e.message}',
+          'Critical database error in updatePresence: ${e.message}',
           name: 'ChatService',
         );
       }
@@ -411,10 +420,10 @@ class ChatService {
       );
       return docs.documents.isNotEmpty ? docs.documents.first : null;
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
         log(
-          'Database error in getUserPresence: ${e.message}',
+          'Critical database error in getUserPresence: ${e.message}',
           name: 'ChatService',
         );
       }
@@ -441,10 +450,10 @@ class ChatService {
       }
       return result.total;
     } catch (e) {
-      // Log critical database errors for debugging
+      // Only log critical server errors for debugging
       if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
         log(
-          'Database error in getUnreadCount: ${e.message}',
+          'Critical database error in getUnreadCount: ${e.message}',
           name: 'ChatService',
         );
       }

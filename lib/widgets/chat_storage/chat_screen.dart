@@ -45,7 +45,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   String? _currentUserId;
   String? _chatId;
-  bool _wasOnline = true;
   late final AudioRecorder _record;
   final player = AudioPlayer();
   late final AudioMessagesHandler _audioHandler;
@@ -540,17 +539,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       messageSubscription = ChatService.subscribeToMessages(chatId, (response) {
         if (!mounted) return;
         try {
-          final newMessage = Message.fromJson(
-            response.payload,
-          ); // sent status message
+          final newMessage = Message.fromJson(response.payload);
 
           if (!mounted) return;
           final currentMessages = ref.read(messagesProvider(chatId));
 
           // Check if this is an update to an existing message or a new message
           final existingIndex = currentMessages.indexWhere(
-            (msg) =>
-                msg.id == newMessage.id, // if newMessage has status delivered
+            (msg) => msg.id == newMessage.id,
           );
 
           if (existingIndex != -1) {
@@ -568,7 +564,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ref.read(messagesProvider(chatId).notifier).state = [
               newMessage,
               ...currentMessages,
-            ]; // if sent status message simply add it in the UI
+            ];
 
             // IMPORTANT: Auto-mark as delivered if receiver is online and in chat
             if (newMessage.status == 'sent' &&
@@ -1274,39 +1270,52 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<bool>>(networkConnectivityProvider, (previous, next) {
-      if (!mounted) return;
+    return Consumer(
+      builder: (context, ref, child) {
+        // Listen to network connectivity changes only when necessary
+        ref.listen<AsyncValue<bool>>(networkConnectivityProvider, (
+          previous,
+          next,
+        ) {
+          if (!mounted) return;
 
-      next.whenData((isOnline) {
-        if (isOnline != _wasOnline) {
-          _wasOnline = isOnline;
-          _handleConnectivityChange(isOnline);
-        }
-      });
-    });
+          // Only handle connectivity changes if both previous and next have values
+          if (previous?.hasValue == true && next.hasValue) {
+            final wasOnline = previous!.value!;
+            final isOnline = next.value!;
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => const CheckConnection(child: LandingPage()),
+            // Only trigger connectivity change if there's an actual change
+            if (wasOnline != isOnline) {
+              _handleConnectivityChange(isOnline);
+            }
+          }
+        });
+
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) =>
+                    const CheckConnection(child: LandingPage()),
+              ),
+            );
+          },
+          child: Scaffold(
+            backgroundColor: AppColors.background,
+            body: SafeArea(
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  _buildMessagesList(),
+                  _buildInputSection(),
+                ],
+              ),
+            ),
           ),
         );
       },
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              _buildMessagesList(),
-              _buildInputSection(),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -1320,26 +1329,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           name: 'ChatScreen',
         );
 
-        // Try to resume paused subscriptions first
-        try {
-          messageSubscription?.resume();
-          typingSubscription?.resume();
-          presenceSubscription?.resume();
-        } catch (e) {
-          // If resume fails, re-establish subscriptions
+        // Only try to resume if subscriptions exist and are paused
+        if (messageSubscription != null) {
+          try {
+            messageSubscription?.resume();
+          } catch (e) {
+            // If resume fails, re-establish
+            _subscribeToMessages();
+          }
+        } else {
           _subscribeToMessages();
-          _subscribeToTyping();
-          _subscribeToPresence();
         }
 
-        // If subscriptions were null, re-establish them
-        if (messageSubscription == null) {
-          _subscribeToMessages();
-        }
-        if (typingSubscription == null) {
+        if (typingSubscription != null) {
+          try {
+            typingSubscription?.resume();
+          } catch (e) {
+            // If resume fails, re-establish
+            _subscribeToTyping();
+          }
+        } else {
           _subscribeToTyping();
         }
-        if (presenceSubscription == null) {
+
+        if (presenceSubscription != null) {
+          try {
+            presenceSubscription?.resume();
+          } catch (e) {
+            // If resume fails, re-establish
+            _subscribeToPresence();
+          }
+        } else {
           _subscribeToPresence();
         }
 

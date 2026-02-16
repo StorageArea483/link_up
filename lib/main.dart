@@ -6,12 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/pages/landing_page.dart';
+import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/services/notification_service.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'firebase_options.dart';
 
 // Global navigator key for navigation from background
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final NotificationService notificationService = NotificationService();
 
 // Background message handler must be annotated and top-level
 @pragma('vm:entry-point')
@@ -39,7 +41,8 @@ void main() async {
 
   // Initialize NotificationService
   try {
-    await NotificationService.initialize();
+    await notificationService.initialize();
+    notificationService.listenToForegroundMessages();
   } catch (e) {
     // Notification service failure is critical - log for debugging
     log('Notification service initialization failed: $e', name: 'Main');
@@ -60,6 +63,7 @@ class MyApp extends StatelessWidget {
       home: const CheckConnection(child: LandingPage()),
       routes: {
         '/landing': (context) => const CheckConnection(child: LandingPage()),
+        '/chats': (context) => const CheckConnection(child: UserChats()),
       },
     );
   }

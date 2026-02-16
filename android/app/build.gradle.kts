@@ -14,6 +14,7 @@ android {
     ndkVersion = "27.0.12077973"
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -57,4 +58,5 @@ dependencies {
     // Firebase dependencies (versions managed by BoM)
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

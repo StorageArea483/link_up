@@ -2,14 +2,49 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:googleapis_auth/auth_io.dart';
 
 class NotificationService {
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
+  final messaging = FirebaseMessaging.instance;
+  final flutterLocalNotificationPlugin = FlutterLocalNotificationsPlugin();
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   // Initialize the service and ensure dotenv is loaded
-  static Future<void> initialize() async {
+
+  Future<void> initialize() async {
+    // Android initialization settings
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    // iOS initialization settings
+    const DarwinInitializationSettings iosSettings =
+        DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
+
+    // Combined initialization settings
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: androidSettings, iOS: iosSettings);
+
+    try {
+      // Initialize the plugin
+      await flutterLocalNotificationPlugin.initialize(
+        settings: initializationSettings,
+
+        onDidReceiveNotificationResponse: (details) {
+          cancelAllNotifications();
+          navigatorKey.currentState?.pushReplacementNamed('/chats');
+        },
+      );
+    } catch (e) {
+      rethrow;
+    }
+
     try {
       if (!dotenv.isInitialized) {
         await dotenv.load(fileName: ".env");
@@ -29,6 +64,43 @@ class NotificationService {
     } catch (e) {
       rethrow;
     }
+  }
+
+  Future<void> createLocalNotificationChannel(
+    int id,
+    String title,
+    String body,
+  ) async {
+    // Android notification details
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'default_channel',
+          'Default Channel',
+          channelDescription: 'This is the default notification channel',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+        );
+
+    // iOS notification details
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    // Combined notification details
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await flutterLocalNotificationPlugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: notificationDetails,
+    );
   }
 
   // Save FCM token to Firestore for a specific user
@@ -155,6 +227,24 @@ class NotificationService {
     } catch (e) {
       rethrow;
     }
+  }
+
+  // Listen for foreground FCM messages and show local notification
+  void listenToForegroundMessages() {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      final notification = message.notification;
+      if (notification != null) {
+        createLocalNotificationChannel(
+          notification.hashCode,
+          notification.title ?? 'New Message',
+          notification.body ?? '',
+        );
+      }
+    });
+  }
+
+  Future<void> cancelAllNotifications() async {
+    await flutterLocalNotificationPlugin.cancelAll();
   }
 
   // Helper method to ensure dotenv is initialized

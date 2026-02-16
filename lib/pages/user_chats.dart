@@ -12,6 +12,7 @@ import 'package:link_up/widgets/app_error_widget.dart';
 import 'package:link_up/widgets/bottom_navbar.dart';
 import 'package:link_up/widgets/chat_storage/chat_screen.dart';
 import 'package:link_up/widgets/check_connection.dart';
+import 'dart:developer';
 
 class UserChats extends ConsumerStatefulWidget {
   const UserChats({super.key});
@@ -20,12 +21,17 @@ class UserChats extends ConsumerStatefulWidget {
   ConsumerState<UserChats> createState() => _UserChatsState();
 }
 
-class _UserChatsState extends ConsumerState<UserChats> {
+class _UserChatsState extends ConsumerState<UserChats>
+    with WidgetsBindingObserver {
   var messageSubscription;
 
   @override
   void initState() {
     super.initState();
+
+    // Add lifecycle observer
+    WidgetsBinding.instance.addObserver(this);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeText();
     });
@@ -33,14 +39,124 @@ class _UserChatsState extends ConsumerState<UserChats> {
 
   @override
   void dispose() {
+    // Remove lifecycle observer
+    WidgetsBinding.instance.removeObserver(this);
+
     messageSubscription?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (!mounted) return;
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _handleAppResumed();
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        _handleAppPaused();
+        break;
+      case AppLifecycleState.detached:
+        _handleAppDetached();
+        break;
+    }
+  }
+
+  void _handleAppDetached() {
+    try {
+      if (!mounted) return;
+
+      log('App detached - cancelling subscriptions', name: 'UserChats');
+      // App is about to be terminated, clean up subscriptions
+      messageSubscription?.cancel();
+      // Set subscriptions to null so they can be re-established if needed
+      messageSubscription = null;
+    } catch (e) {
+      log('Failed to handle app detached: $e', name: 'UserChats');
+    }
+  }
+
+  void _handleAppResumed() async {
+    try {
+      if (!mounted) return;
+      // Re-establish subscription if needed
+      log('App resumed - adding subscriptions', name: 'UserChats');
+      if (messageSubscription == null) {
+        _subscribeToMessages();
+      }
+
+      // Invalidate and refresh all contact-related providers
+      if (mounted) {
+        ref.invalidate(userContactProvider);
+
+        final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+        if (currentUserId != null && mounted) {
+          try {
+            final contacts = await ref.read(userContactProvider.future);
+            if (!mounted) return;
+
+            for (final contact in contacts) {
+              if (!mounted) return;
+              ref.invalidate(lastMessageProvider(contact.uid));
+              ref.invalidate(unreadCountProvider(contact.uid));
+            }
+          } catch (e) {
+            log('Failed to handle app resumed: $e', name: 'UserChats');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Failed to refresh chat data. Please restart the app.',
+                  ),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      log('Failed to handle app resume: $e', name: 'UserChats');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Failed to restore chat connections. Please restart the app.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleAppPaused() {
+    try {
+      if (!mounted) return;
+      log(
+        'App paused - pausing subscriptions to save resources',
+        name: 'UserChats',
+      );
+      // Pause subscriptions to save battery and network resources
+      // They will be resumed when app comes back to foreground
+      messageSubscription?.pause();
+    } catch (e) {
+      log('Failed to handle app pause: $e', name: 'UserChats');
+    }
   }
 
   void _subscribeToMessages() {
     try {
       final currentUserId = FirebaseAuth.instance.currentUser?.uid;
       if (currentUserId == null) return;
+
+      // Cancel existing subscription if it exists
+      messageSubscription?.cancel();
 
       // Subscribe to all messages with status 'sent'
       messageSubscription = ChatService.subscribeToRealtimeMessages((message) {
@@ -66,11 +182,23 @@ class _UserChatsState extends ConsumerState<UserChats> {
             ref.invalidate(unreadCountProvider(contactId));
           }
         } catch (e) {
-          // Handle parsing errors silently
+          // Handle parsing errors silently - these are expected for malformed messages
+          log('Failed to parse realtime message: $e', name: 'UserChats');
         }
       });
     } catch (e) {
+      log('Failed to setup message subscription: $e', name: 'UserChats');
       messageSubscription?.cancel();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Failed to connect to chat service. Please check your connection.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -87,7 +215,8 @@ class _UserChatsState extends ConsumerState<UserChats> {
         messageSubscription?.resume();
       }
     } catch (e) {
-      // Handle connectivity check error
+      log('Failed to check network connectivity: $e', name: 'UserChats');
+      // Continue initialization even if connectivity check fails
     }
 
     // Pre-warm the providers for better performance
@@ -104,7 +233,8 @@ class _UserChatsState extends ConsumerState<UserChats> {
           ref.read(unreadCountProvider(contact.uid));
         }
       } catch (e) {
-        // Handle errors silently
+        log('Failed to pre-load contact data: $e', name: 'UserChats');
+        // Continue even if pre-loading fails - data will load on demand
       }
     }
   }
@@ -117,12 +247,8 @@ class _UserChatsState extends ConsumerState<UserChats> {
 
       next.whenData((isOnline) {
         if (isOnline) {
-          messageSubscription?.resume();
-
-          // If subscriptions were null or failed, recreate them
-          if (messageSubscription == null) {
-            _subscribeToMessages();
-          }
+          // Re-establish subscription (it will cancel existing one first)
+          _subscribeToMessages();
 
           // Refresh all providers when coming back online
           if (!mounted) return;

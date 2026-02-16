@@ -35,7 +35,8 @@ class ChatScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
 
   var messageSubscription;
@@ -77,6 +78,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
 
+    // Add lifecycle observer
+    WidgetsBinding.instance.addObserver(this);
+
     // Initialize audio components immediately (synchronously)
     _record = AudioRecorder();
     _audioHandler = AudioMessagesHandler(
@@ -110,6 +114,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    // Remove lifecycle observer
+    WidgetsBinding.instance.removeObserver(this);
+
     _messageController.dispose();
     messageSubscription?.cancel();
     typingSubscription?.cancel();
@@ -137,6 +144,118 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (!mounted) return;
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _handleAppResumed();
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        _handleAppPaused();
+        break;
+      case AppLifecycleState.detached:
+        _handleAppDetached();
+        break;
+    }
+  }
+
+  void _handleAppDetached() {
+    try {
+      if (!mounted) return;
+
+      log('App detached - cancelling subscriptions', name: 'ChatScreen');
+
+      // App is about to be terminated, clean up subscriptions
+      messageSubscription?.cancel();
+      typingSubscription?.cancel();
+      presenceSubscription?.cancel();
+
+      // Set subscriptions to null so they can be re-established if needed
+      messageSubscription = null;
+      typingSubscription = null;
+      presenceSubscription = null;
+    } catch (e) {
+      log('Failed to handle app detached: $e', name: 'ChatScreen');
+    }
+  }
+
+  void _handleAppResumed() async {
+    try {
+      if (!mounted || _currentUserId == null || _chatId == null) return;
+
+      log(
+        'App resumed - resuming/re-establishing subscriptions',
+        name: 'ChatScreen',
+      );
+
+      // Try to resume paused subscriptions first
+      try {
+        messageSubscription?.resume();
+        typingSubscription?.resume();
+        presenceSubscription?.resume();
+      } catch (e) {
+        log(
+          'Failed to resume subscriptions, will re-establish: $e',
+          name: 'ChatScreen',
+        );
+        // If resume fails, subscriptions might be dead, so re-establish them
+        messageSubscription = null;
+        typingSubscription = null;
+        presenceSubscription = null;
+      }
+
+      // Re-establish subscriptions if they were lost or resume failed
+      if (messageSubscription == null) {
+        _subscribeToMessages();
+      }
+      if (typingSubscription == null) {
+        _subscribeToTyping();
+      }
+      if (presenceSubscription == null) {
+        _subscribeToPresence();
+      }
+
+      // Refresh provider state by invalidating relevant providers
+      if (mounted) {
+        ref.invalidate(unreadCountProvider(widget.contact.uid));
+        ref.invalidate(lastMessageProvider(widget.contact.uid));
+      }
+
+      // Check for new messages and update providers
+      await _markMessagesAsDeliveredAndUpdate(_currentUserId!);
+
+      // Check contact's current presence
+      await _checkUserPresence();
+    } catch (e) {
+      log('Failed to handle app resume: $e', name: 'ChatScreen');
+    }
+  }
+
+  void _handleAppPaused() {
+    try {
+      if (!mounted) return;
+
+      log(
+        'App paused - pausing subscriptions to save resources',
+        name: 'ChatScreen',
+      );
+
+      // Pause subscriptions to save battery and network resources
+      // They will be resumed when app comes back to foreground
+      messageSubscription?.pause();
+      typingSubscription?.pause();
+      presenceSubscription?.pause();
+    } catch (e) {
+      log('Failed to handle app pause: $e', name: 'ChatScreen');
+    }
   }
 
   Future<void> _initializeChat() async {
@@ -416,6 +535,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (chatId == null) return;
 
     try {
+      // Cancel existing subscription if it exists
+      messageSubscription?.cancel();
+
       messageSubscription = ChatService.subscribeToMessages(chatId, (response) {
         if (!mounted) return;
         try {
@@ -472,7 +594,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           log('Failed to process incoming message: $e', name: 'ChatScreen');
         }
       });
-    } catch (e) {}
+
+      log(
+        'Message subscription established for chatId: $chatId',
+        name: 'ChatScreen',
+      );
+    } catch (e) {
+      log('Failed to setup message subscription: $e', name: 'ChatScreen');
+    }
   }
 
   Future<void> _handleDeliveredMessage(Message message) async {
@@ -826,6 +955,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final currentUserId = ref.read(currentUserIdProvider);
       if (chatId == null) return;
 
+      // Cancel existing subscription if it exists
+      typingSubscription?.cancel();
+
       typingSubscription = ChatService.subscribeToTyping(chatId, (response) {
         if (!mounted) return;
         try {
@@ -838,6 +970,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           log('Failed to process typing indicator: $e', name: 'ChatScreen');
         }
       });
+
+      log(
+        'Typing subscription established for chatId: $chatId',
+        name: 'ChatScreen',
+      );
     } catch (e) {
       log('Failed to setup typing subscription: $e', name: 'ChatScreen');
     }
@@ -846,6 +983,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _subscribeToPresence() {
     try {
       if (!mounted) return;
+
+      // Cancel existing subscription if it exists
+      presenceSubscription?.cancel();
 
       presenceSubscription = ChatService.subscribeToPresence(widget.contact.uid, (
         response,
@@ -883,6 +1023,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           log('Failed to process presence update: $e', name: 'ChatScreen');
         }
       });
+
+      log(
+        'Presence subscription established for userId: ${widget.contact.uid}',
+        name: 'ChatScreen',
+      );
     } catch (e) {
       log('Failed to setup presence subscription: $e', name: 'ChatScreen');
     }
@@ -1164,12 +1309,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (_currentUserId == null || !mounted) return;
 
       if (isOnline) {
-        // Try to resume subscriptions first
-        messageSubscription?.resume();
-        typingSubscription?.resume();
-        presenceSubscription?.resume();
+        log(
+          'Network reconnected - resuming/re-establishing subscriptions',
+          name: 'ChatScreen',
+        );
 
-        // If subscriptions were null or failed, recreate them
+        // Try to resume paused subscriptions first
+        try {
+          messageSubscription?.resume();
+          typingSubscription?.resume();
+          presenceSubscription?.resume();
+        } catch (e) {
+          log(
+            'Failed to resume subscriptions, will re-establish: $e',
+            name: 'ChatScreen',
+          );
+          // If resume fails, re-establish subscriptions
+          _subscribeToMessages();
+          _subscribeToTyping();
+          _subscribeToPresence();
+        }
+
+        // If subscriptions were null, re-establish them
         if (messageSubscription == null) {
           _subscribeToMessages();
         }
@@ -1246,7 +1407,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
         }
       } else {
-        // Going offline - messages are already persisted in the family provider
+        log('Network disconnected - pausing subscriptions', name: 'ChatScreen');
+
+        // Going offline - pause subscriptions to save resources
         messageSubscription?.pause();
         typingSubscription?.pause();
         presenceSubscription?.pause();

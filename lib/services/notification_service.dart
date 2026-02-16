@@ -1,18 +1,13 @@
 import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:googleapis_auth/auth_io.dart';
 
 class NotificationService {
   FirebaseMessaging messaging = FirebaseMessaging.instance;
-  // Global navigator key for navigation from background
-  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
   // Initialize the service and ensure dotenv is loaded
   static Future<void> initialize() async {
     try {

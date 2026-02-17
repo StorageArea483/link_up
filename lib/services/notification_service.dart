@@ -203,7 +203,6 @@ class NotificationService {
         'message': {
           'token': deviceToken,
           'notification': {'title': title, 'body': body},
-          'data': {'navigate': 'landing'},
         },
       };
 

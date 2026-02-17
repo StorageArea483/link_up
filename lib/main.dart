@@ -11,17 +11,12 @@ import 'package:link_up/services/notification_service.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'firebase_options.dart';
 
-// Global navigator key for navigation from background
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final NotificationService notificationService = NotificationService();
-
 // Background message handler must be annotated and top-level
 @pragma('vm:entry-point')
 Future<void> handleBackgroundMessage(RemoteMessage message) async {
   // Handle navigation when app is opened from background notification
-  if (message.data['navigate'] == 'landing') {
-    navigatorKey.currentState?.pushReplacementNamed('/landing');
-  }
+  notificationService.navigatorKey.currentState?.pushReplacementNamed('/chats');
 }
 
 void main() async {
@@ -59,10 +54,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: navigatorKey,
+      navigatorKey: notificationService.navigatorKey,
       home: const CheckConnection(child: LandingPage()),
       routes: {
-        '/landing': (context) => const CheckConnection(child: LandingPage()),
         '/chats': (context) => const CheckConnection(child: UserChats()),
       },
     );

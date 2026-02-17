@@ -12,6 +12,7 @@ import 'package:link_up/widgets/app_error_widget.dart';
 import 'package:link_up/widgets/bottom_navbar.dart';
 import 'package:link_up/widgets/chat_storage/chat_screen.dart';
 import 'package:link_up/widgets/check_connection.dart';
+import 'dart:async';
 import 'dart:developer';
 
 class UserChats extends ConsumerStatefulWidget {
@@ -23,7 +24,7 @@ class UserChats extends ConsumerStatefulWidget {
 
 class _UserChatsState extends ConsumerState<UserChats>
     with WidgetsBindingObserver {
-  var messageSubscription;
+  StreamSubscription? messageSubscription;
 
   @override
   void initState() {
@@ -84,10 +85,12 @@ class _UserChatsState extends ConsumerState<UserChats>
   void _handleAppResumed() async {
     try {
       if (!mounted) return;
-      // Re-establish subscription if needed
+      // Re-establish or resume subscription
       log('App resumed - adding subscriptions', name: 'UserChats');
       if (messageSubscription == null) {
         _subscribeToMessages();
+      } else if (messageSubscription!.isPaused) {
+        messageSubscription!.resume();
       }
 
       // Invalidate and refresh all contact-related providers
@@ -199,6 +202,11 @@ class _UserChatsState extends ConsumerState<UserChats>
   }
 
   Future<void> _initializeText() async {
+    // Invalidate all relevant providers first to ensure fresh data.
+    // This is critical when navigating here from a notification tap,
+    // because the previous widget's providers may have stale cached values.
+    ref.invalidate(userContactProvider);
+
     _subscribeToMessages();
 
     // Check initial network connectivity
@@ -214,7 +222,7 @@ class _UserChatsState extends ConsumerState<UserChats>
       // Continue initialization even if connectivity check fails
     }
 
-    // Pre-warm the providers for better performance
+    // Pre-warm the providers and invalidate per-contact providers for fresh data
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     if (currentUserId != null && mounted) {
       try {
@@ -222,8 +230,10 @@ class _UserChatsState extends ConsumerState<UserChats>
         final contacts = await ref.read(userContactProvider.future);
         if (!mounted) return;
         for (final contact in contacts) {
-          // Pre-load last messages and unread counts for all contacts
+          // Invalidate to clear stale data, then read to pre-load fresh data
           if (!mounted) return;
+          ref.invalidate(lastMessageProvider(contact.uid));
+          ref.invalidate(unreadCountProvider(contact.uid));
           ref.read(lastMessageProvider(contact.uid));
           ref.read(unreadCountProvider(contact.uid));
         }

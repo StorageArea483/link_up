@@ -609,10 +609,14 @@ class AudioMessagesHandler {
 
         final notificationService = NotificationService();
 
+        if (message.status == 'delivered') {
+          return;
+        }
         await notificationService.sendPushNotification(
           deviceToken: receiverToken,
           title: senderName,
           body: '🎵 Voice message',
+          messageStatus: message.status,
         );
       }
     } catch (e) {

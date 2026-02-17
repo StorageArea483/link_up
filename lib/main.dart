@@ -34,10 +34,13 @@ void main() async {
   // Load environment variables
   await dotenv.load(fileName: ".env");
 
+  // Create a ProviderContainer to access providers in main()
+  final container = ProviderContainer();
+
   // Initialize NotificationService
   try {
     await notificationService.initialize();
-    notificationService.listenToForegroundMessages();
+    notificationService.listenToForegroundMessages(container);
   } catch (e) {
     // Notification service failure is critical - log for debugging
     log('Notification service initialization failed: $e', name: 'Main');
@@ -45,7 +48,7 @@ void main() async {
 
   FirebaseMessaging.onBackgroundMessage(handleBackgroundMessage);
 
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 }
 
 class MyApp extends StatelessWidget {

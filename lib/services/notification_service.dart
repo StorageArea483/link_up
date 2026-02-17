@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:googleapis_auth/auth_io.dart';
+import 'package:link_up/providers/navigation_provider.dart';
 
 class NotificationService {
   final messaging = FirebaseMessaging.instance;
@@ -180,6 +181,7 @@ class NotificationService {
     required String deviceToken, // receiver device token
     required String title,
     required String body,
+    required String messageStatus,
   }) async {
     if (deviceToken.isEmpty) return;
 
@@ -203,6 +205,7 @@ class NotificationService {
         'message': {
           'token': deviceToken,
           'notification': {'title': title, 'body': body},
+          'data': {'status': messageStatus},
         },
       };
 
@@ -229,9 +232,14 @@ class NotificationService {
   }
 
   // Listen for foreground FCM messages and show local notification
-  void listenToForegroundMessages() {
+  void listenToForegroundMessages(dynamic ref) {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final notification = message.notification;
+      final messageStatus = message.data['status'];
+      final activeChatStatus = ref.read(navigationProvider);
+      if (messageStatus == 'delivered' || activeChatStatus == 'chat') {
+        return;
+      }
       if (notification != null) {
         createLocalNotificationChannel(
           notification.hashCode,

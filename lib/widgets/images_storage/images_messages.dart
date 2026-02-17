@@ -249,13 +249,16 @@ class ImageMessagesHandler {
 
       final senderData = senderDoc.data();
       final senderName = senderData?['name'] as String? ?? 'Someone';
-
+      if (message.status == 'delivered') {
+        return;
+      }
       // Send push notification
       final notificationService = NotificationService();
       await notificationService.sendPushNotification(
         deviceToken: receiverToken,
         title: senderName,
         body: '📷 Photo',
+        messageStatus: message.status,
       );
     } catch (e) {
       // Silent failure - push notification failure is not critical for image sending

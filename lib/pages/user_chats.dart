@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
+import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/providers/chat_providers.dart';
@@ -34,7 +35,7 @@ class _UserChatsState extends ConsumerState<UserChats>
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeText();
+      _initialize();
     });
   }
 
@@ -201,10 +202,11 @@ class _UserChatsState extends ConsumerState<UserChats>
     }
   }
 
-  Future<void> _initializeText() async {
-    // Invalidate all relevant providers first to ensure fresh data.
-    // This is critical when navigating here from a notification tap,
-    // because the previous widget's providers may have stale cached values.
+  Future<void> _initialize() async {
+    if (mounted) {
+      ref.read(navigationProvider.notifier).state = 'null';
+    }
+    if (!mounted) return;
     ref.invalidate(userContactProvider);
 
     _subscribeToMessages();

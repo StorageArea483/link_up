@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 import 'dart:io' as io;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,6 +11,7 @@ import 'package:link_up/models/user_contacts.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
+import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/pages/user_chats.dart';
@@ -39,9 +41,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
 
-  var messageSubscription;
-  var typingSubscription;
-  var presenceSubscription;
+  StreamSubscription? messageSubscription;
+  StreamSubscription? typingSubscription;
+  StreamSubscription? presenceSubscription;
 
   String? _currentUserId;
   String? _chatId;
@@ -139,7 +141,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     } catch (e) {
       // Silent cleanup failure - disposal should not be prevented
     }
-
     super.dispose();
   }
 
@@ -193,27 +194,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         name: 'ChatScreen',
       );
 
-      // Try to resume paused subscriptions first
-      try {
-        messageSubscription?.resume();
-        typingSubscription?.resume();
-        presenceSubscription?.resume();
-      } catch (e) {
-        // If resume fails, subscriptions might be dead, so re-establish them
-        messageSubscription = null;
-        typingSubscription = null;
-        presenceSubscription = null;
-      }
-
-      // Re-establish subscriptions if they were lost or resume failed
+      // Re-establish or resume each subscription
       if (messageSubscription == null) {
         _subscribeToMessages();
+      } else if (messageSubscription!.isPaused) {
+        messageSubscription!.resume();
       }
+
       if (typingSubscription == null) {
         _subscribeToTyping();
+      } else if (typingSubscription!.isPaused) {
+        typingSubscription!.resume();
       }
+
       if (presenceSubscription == null) {
         _subscribeToPresence();
+      } else if (presenceSubscription!.isPaused) {
+        presenceSubscription!.resume();
       }
 
       // Refresh provider state by invalidating relevant providers
@@ -262,6 +259,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Future<void> _initializeChat() async {
     try {
+      if (mounted) {
+        ref.read(navigationProvider.notifier).state = 'chat';
+      }
       if (!mounted) return;
       final userId = FirebaseAuth.instance.currentUser?.uid;
       _currentUserId = userId;
@@ -1231,10 +1231,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       } else {
         notificationBody = 'Sent a message';
       }
+      if (message.status == 'delivered') {
+        return;
+      }
       await notificationService.sendPushNotification(
         deviceToken: receiverToken,
         title: senderName,
         body: notificationBody,
+        messageStatus: message.status,
       );
     } catch (e) {
       // Silent failure - push notification failure is not critical for message sending

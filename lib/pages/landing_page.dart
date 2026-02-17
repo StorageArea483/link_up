@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/providers/loading_provider.dart';
+import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/providers/random_num_provider.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/add_new_contact/qr_code.dart';
@@ -25,7 +26,16 @@ class LandingPage extends ConsumerStatefulWidget {
 class _LandingPageState extends ConsumerState<LandingPage> {
   @override
   void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initialize();
+    });
     super.initState();
+  }
+
+  void _initialize() {
+    if (mounted) {
+      ref.read(navigationProvider.notifier).state = 'null';
+    }
   }
 
   @override

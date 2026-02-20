@@ -27,7 +27,7 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (e) {
-    // Firebase initialization failure is critical - log for debugging
+    // Firebase initialization failure is critical - lo g for debugging
     log('Firebase initialization failed: $e', name: 'Main');
   }
 

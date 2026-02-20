@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:link_up/pages/landing_page.dart';
+import 'package:link_up/pages/meetings_page.dart';
 import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/check_connection.dart';
@@ -51,6 +52,11 @@ class BottomNavbar extends StatelessWidget {
             MaterialPageRoute(builder: (context) => const LandingPage()),
           );
         } else if (index == 1) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const CheckConnection(child: MeetingsPage()),
+            ),
+          );
         } else if (index == 2) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(

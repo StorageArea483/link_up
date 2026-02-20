@@ -81,7 +81,7 @@ class ImageMessagesHandler {
       );
 
       if (compressedImage == null) {
-        if (context.mounted) {
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.pop(context);
           _showSnackBar(
             'Unable to process image. Please try again.',
@@ -159,7 +159,7 @@ class ImageMessagesHandler {
           _sendPushNotificationToReceiver(newMessage);
         }
 
-        if (context.mounted) {
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.pop(context);
           _showSnackBar('Image sent successfully', Colors.green);
         }
@@ -170,14 +170,14 @@ class ImageMessagesHandler {
 
         return true;
       } else {
-        if (context.mounted) {
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.pop(context);
           _showSnackBar('Unable to send image. Please try again.', Colors.red);
         }
         return false;
       }
     } catch (e) {
-      if (context.mounted) {
+      if (context.mounted && Navigator.of(context).canPop()) {
         Navigator.pop(context);
         _showSnackBar(
           'Unable to upload image. Please check your connection and try again.',

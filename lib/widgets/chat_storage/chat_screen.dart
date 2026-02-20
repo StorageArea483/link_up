@@ -1216,8 +1216,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         return;
       }
 
-      final senderData = senderDoc.data();
-      final senderName = senderData?['name'] as String? ?? 'Someone';
+      final senderName = widget.contact.name;
       final notificationService = NotificationService();
 
       // Determine the message body based on message type

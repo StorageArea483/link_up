@@ -249,7 +249,7 @@ class AudioMessagesHandler {
       final fileExists = await recordingFile.exists();
 
       if (!fileExists) {
-        if (context.mounted) {
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.pop(context);
           _showSnackBar(
             'Unable to find recording. Please try again.',
@@ -262,7 +262,7 @@ class AudioMessagesHandler {
       final fileSize = await recordingFile.length();
 
       if (fileSize == 0) {
-        if (context.mounted) {
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.pop(context);
           _showSnackBar('Recording is empty. Please try again.', Colors.red);
         }
@@ -335,7 +335,7 @@ class AudioMessagesHandler {
           _sendPushNotificationToReceiver(newMessage);
         }
 
-        if (context.mounted) {
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.pop(context); // Close uploading dialog
           _showSnackBar('Audio sent successfully', Colors.green);
         }
@@ -351,7 +351,7 @@ class AudioMessagesHandler {
           // Handle invalidation error silently
         }
       } else {
-        if (context.mounted) {
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.pop(context);
           _showSnackBar('Unable to send audio. Please try again.', Colors.red);
         }
@@ -359,7 +359,7 @@ class AudioMessagesHandler {
 
       return true;
     } catch (e) {
-      if (context.mounted) {
+      if (context.mounted && Navigator.of(context).canPop()) {
         Navigator.pop(context);
         _showSnackBar(
           'Unable to send audio. Please check your connection and try again.',
@@ -489,7 +489,9 @@ class AudioMessagesHandler {
         // Silent failure - file operations errors are not critical
       }
     }
-    Navigator.pop(context);
+    if (context.mounted && Navigator.of(context).canPop()) {
+      Navigator.pop(context);
+    }
     // Reset all states
     _isAudioCompleted = false; // Reset the completed flag
     if (context.mounted) {

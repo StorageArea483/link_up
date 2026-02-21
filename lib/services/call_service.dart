@@ -199,7 +199,6 @@ class CallService {
           documentId: doc.$id,
         );
       }
-
       // Delete the call document itself
       await databases.deleteDocument(
         databaseId: databaseId,

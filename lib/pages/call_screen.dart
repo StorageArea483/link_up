@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -44,8 +45,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   _localStream; // instance used to extract the voice & media related details of current user
 
   // ─── Subscriptions ───
-  StreamSubscription? _callSub;
-  StreamSubscription? _iceSub;
+  StreamSubscription? _callSub; // call subscription
+  StreamSubscription? _iceSub; // ice candidate subscription
 
   // ignore: prefer_final_fields
   String? callId;
@@ -81,6 +82,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   Future<void> _sendCandidate(RTCIceCandidate candidate) async {
     try {
+      // ice candidates created by caller and added to appwrite
       await CallService.addIceCandidate(
         callId: callId!,
         senderId: _currentUserId,
@@ -91,17 +93,17 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         }),
       );
     } catch (e) {
-      debugPrint('[ICE] Send failed: $e');
+      log('[ICE] Send failed: $e');
     }
   }
 
   Future<void> _initCall() async {
     // 1. Init renderers
     try {
+      if (!mounted) return;
       await _localRenderer.initialize();
       if (!mounted) return;
       await _remoteRenderer.initialize();
-      if (!mounted) return;
     } catch (e) {
       _showError('Failed to initialize video. Please try again.');
       if (mounted && Navigator.of(context).canPop()) {
@@ -112,12 +114,18 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
     // 2. Get local media (camera + microphone)
     try {
+      if (!mounted) return;
       _localStream = await navigator.mediaDevices.getUserMedia({
         'audio': true,
         'video': widget.isVideo
             ? {'facingMode': 'user', 'width': 640, 'height': 480}
             : false,
       });
+      // ✅ DEBUG HERE — tracks exist now
+      for (final t in _localStream!.getTracks()) {
+        log("LOCAL TRACK → ${t.kind} enabled=${t.enabled}");
+      }
+      log("VIDEO TRACK COUNT → ${_localStream!.getVideoTracks().length}");
       if (!mounted) return;
       _localRenderer.srcObject = _localStream;
     } catch (e) {
@@ -133,7 +141,15 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
     // 3. Create RTCPeerConnection
     try {
+      if (!mounted) return;
       _peerConnection = await createPeerConnection(_iceServers);
+      _peerConnection!.onConnectionState = (state) async {
+        log("PC CONNECTION STATE → $state");
+        if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          await Helper.setSpeakerphoneOn(true);
+          log("SPEAKER ENABLED AFTER CONNECT");
+        }
+      };
       // 4. Listen for ICE candidates and send them to Appwrite
       _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) {
         if (candidate.candidate == null) return;
@@ -144,7 +160,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
           _sendCandidate(candidate);
         }
       };
-      if (!mounted) return;
     } catch (e) {
       _showError('Failed to establish connection. Please try again.');
       if (mounted && Navigator.of(context).canPop()) {
@@ -156,8 +171,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     // 5. Add local tracks to the peer connection
     for (final track in _localStream!.getTracks()) {
       try {
-        await _peerConnection!.addTrack(track, _localStream!);
         if (!mounted) return;
+        await _peerConnection!.addTrack(track, _localStream!);
+        log("TRACK ADDED TO PC → ${track.kind}");
       } catch (e) {
         _showError('Failed to set up media tracks. Please try again.');
         if (mounted && Navigator.of(context).canPop()) {
@@ -169,20 +185,38 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
     // 6. Listen for remote tracks
     _peerConnection!.onTrack = (RTCTrackEvent event) {
-      try {
-        if (event.streams.isNotEmpty && _remoteRenderer.srcObject == null) {
-          _remoteRenderer.srcObject = event.streams[0];
+      if (event.streams.isEmpty) return;
 
-          if (mounted) {
-            ref.read(callProvider.notifier).isConnected = true;
-          }
-        }
-      } catch (e) {
-        debugPrint('Error adding remote track: $e');
+      final stream = event.streams[0];
+
+      // ── DEBUG LOG ──
+      log(
+        "Remote stream tracks: video=${stream.getVideoTracks().length}, audio=${stream.getAudioTracks().length}",
+      );
+
+      if (stream.getVideoTracks().isNotEmpty) {
+        _remoteRenderer.srcObject = stream;
+        log("VIDEO STREAM ATTACHED TO RENDERER");
+      }
+
+      if (mounted) {
+        setState(() {});
+        ref.read(callProvider.notifier).isConnected = true;
       }
     };
     // 7. Handle ICE connection state changes
-    _peerConnection!.onIceConnectionState = (RTCIceConnectionState state) {
+    _peerConnection!
+        .onIceConnectionState = (RTCIceConnectionState state) async {
+      log("ICE STATE → $state");
+
+      // ✅ When connection is established → enable audio output
+      if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+        await Helper.setSpeakerphoneOn(true);
+        log("SPEAKER FORCED ON");
+      }
+
+      // ❌ When connection fails → hang up
       if (state == RTCIceConnectionState.RTCIceConnectionStateDisconnected ||
           state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
         if (mounted) {
@@ -201,13 +235,16 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   Future<void> _startCall() async {
     try {
       // Create SDP offer
-      final offer = await _peerConnection!.createOffer();
+      final offer = await _peerConnection!.createOffer({
+        'offerToReceiveAudio': true,
+        'offerToReceiveVideo': widget.isVideo,
+      });
       if (!mounted) return;
 
       await _peerConnection!.setLocalDescription(offer);
       if (!mounted) return;
 
-      // Save to Appwrite → this creates the call document
+      // Creating SDP offer and adding that offer to appwrite
       final doc = await CallService.createCall(
         callerId: _currentUserId,
         callerName: _currentUserName,
@@ -233,7 +270,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       return;
     }
 
-    // Subscribe to call changes (waiting for answer or ended)
+    // subscribing to call changes checking whether the calle has answered or not
     _callSub = CallService.subscribeToCallChanges(callId!, (response) {
       try {
         final payload = response.payload;
@@ -242,46 +279,50 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         if (status == 'answered') {
           // Callee answered → set remote description
           final answerData = jsonDecode(payload['answer'] as String);
-
+          // sending sdp offer to callee through peer connection
           _peerConnection?.setRemoteDescription(
             RTCSessionDescription(answerData['sdp'], answerData['type']),
           );
-        } else if (status == 'ended') {
-          _cleanupAndPop();
         }
       } catch (e) {
         _showError('Connection issue. The call may drop.');
       }
     });
 
-    // Subscribe to ICE candidates from the other side
+    // Subscribe to ICE candidates sended by the callee
     _iceSub = CallService.subscribeToIceCandidates(callId!, _currentUserId, (
       response,
     ) {
       try {
         final candidateData = jsonDecode(
-          response.payload['candidate'] as String,
+          response.payload['candidate']
+              as String, // extracting ice candidate sended by the callee
         );
         _peerConnection?.addCandidate(
+          // adding ice candidate of callee to peer connection
           RTCIceCandidate(
             candidateData['candidate'],
             candidateData['sdpMid'],
             candidateData['sdpMLineIndex'],
           ),
         );
-      } catch (e) {}
+      } catch (e) {
+        log('Error adding remote candidate: $e');
+      }
     });
   }
 
   Future<void> _joinCall() async {
     // Set the caller's offer as remote description
     try {
+      // sdp offer of caller extracted from appwrite
       final offerData = jsonDecode(widget.remoteOffer!);
 
+      // adding sdp offer of caller to peer connection
+      if (!mounted) return;
       await _peerConnection!.setRemoteDescription(
         RTCSessionDescription(offerData['sdp'], offerData['type']),
       );
-      if (!mounted) return;
     } catch (e) {
       _showError('Failed to connect to the call. Please try again.');
       if (mounted && Navigator.of(context).canPop()) {
@@ -292,7 +333,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
     try {
       // Create SDP answer
-      final answer = await _peerConnection!.createAnswer();
+      final answer = await _peerConnection!.createAnswer({
+        'offerToReceiveAudio': true,
+        'offerToReceiveVideo': widget.isVideo,
+      });
       if (!mounted) return;
 
       await _peerConnection!.setLocalDescription(answer);
@@ -301,6 +345,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       // Send answer back to Appwrite
       await CallService.answerCall(
         callId: widget.callId!,
+        // adding sdp answer of callee to appwrite
         answer: jsonEncode({'sdp': answer.sdp, 'type': answer.type}),
       );
       if (!mounted) return;
@@ -320,7 +365,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         if (status == 'ended') {
           _cleanupAndPop();
         }
-      } catch (e) {}
+      } catch (e) {
+        log('Error in call changes subscription: $e');
+      }
     });
 
     // Subscribe to ICE candidates
@@ -339,7 +386,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
               candidateData['sdpMLineIndex'],
             ),
           );
-        } catch (e) {}
+        } catch (e) {
+          log('Error adding remote candidate: $e');
+        }
       },
     );
   }
@@ -354,8 +403,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       if (callId != null) {
         await CallService.endCall(callId!);
         await CallService.cleanupCall(callId!);
+      } else {
+        log('No call ID found');
       }
     } catch (e) {
+      log('Error ending call: $e');
     } finally {
       _cleanupAndPop();
     }
@@ -375,7 +427,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       _localStream?.dispose();
       _peerConnection?.close();
       _peerConnection = null;
-    } catch (e) {}
+    } catch (e) {
+      log('Error cleaning up call: $e');
+    }
 
     if (mounted && Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
@@ -396,14 +450,13 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     }
   }
 
-  void _toggleSpeaker() {
+  void _toggleSpeaker() async {
     try {
       _isSpeaker = !_isSpeaker;
+      await Helper.setSpeakerphoneOn(_isSpeaker);
+
       if (!mounted) return;
       ref.read(callProvider.notifier).isSpeaker = _isSpeaker;
-      _localStream?.getAudioTracks().forEach((track) {
-        track.enableSpeakerphone(_isSpeaker);
-      });
     } catch (e) {
       _showError('Could not toggle speaker. Please try again.');
     }
@@ -469,7 +522,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
             return Stack(
               children: [
                 // ── Remote Video (full screen) ──
-                if (widget.isVideo)
+                if (widget.isVideo && _remoteRenderer.srcObject != null)
                   Positioned.fill(
                     child: isConnected
                         ? RTCVideoView(

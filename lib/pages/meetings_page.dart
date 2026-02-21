@@ -48,7 +48,8 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
       response,
     ) {
       if (!mounted) return;
-      final payload = response.payload;
+      final payload =
+          response.payload; // ringing call data extracted from appwrite
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => IncomingCallScreen(

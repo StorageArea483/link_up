@@ -52,6 +52,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   bool _isSpeaker = false;
   bool _isHangingUp = false;
   bool _remoteDescSet = false;
+  int _iceFailureCount = 0;
   final Set<String> _remoteCandidateSet = <String>{};
   final List<Map<String, dynamic>> _pendingRemoteCandidates = [];
 
@@ -62,20 +63,14 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   final Map<String, dynamic> _iceServers = {
     'iceServers': [
+      // ─── STUN servers (Google — always free, never expire) ───
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
-      // Metered
-      {
-        'urls': 'turn:relay.metered.ca:80',
-        'username': 'e8dd65f932c59bfa258b9f6c',
-        'credential': 'uMpMLMaBIBTBoBne',
-      },
-      {
-        'urls': 'turns:relay.metered.ca:443',
-        'username': 'e8dd65f932c59bfa258b9f6c',
-        'credential': 'uMpMLMaBIBTBoBne',
-      },
-      // FreeStn backup
+      {'urls': 'stun:stun2.l.google.com:19302'},
+      {'urls': 'stun:stun3.l.google.com:19302'},
+      {'urls': 'stun:stun4.l.google.com:19302'},
+
+      // ─── FreeStn (zero signup, always free) ───
       {
         'urls': 'turn:freestun.net:3478',
         'username': 'free',
@@ -86,11 +81,34 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         'username': 'free',
         'credential': 'free',
       },
-      // ExpressTURN backup
+
+      // ─── ExpressTURN (your current one) ───
       {
         'urls': 'turn:free.expressturn.com:3478',
         'username': '00000000002087100762',
         'credential': 'K2niWENTKTeRYmv/g+H2oWhLRBM=',
+      },
+
+      // ─── Open Relay Project by Metered (free, global) ───
+      {
+        'urls': 'turn:openrelay.metered.ca:80',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turns:openrelay.metered.ca:443',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
       },
     ],
   };
@@ -270,6 +288,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     };
 
     // 6. ICE connection state — full diagnostic logging
+    // 6. ICE connection state — full diagnostic logging
     _peerConnection!
         .onIceConnectionState = (RTCIceConnectionState state) async {
       log('🧊 [ICE STATE] → $state');
@@ -277,6 +296,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
           state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
         log('[ICE STATE] ✅ Connected — enabling speakerphone');
+        _iceFailureCount = 0; // reset on success
         await Helper.setSpeakerphoneOn(true);
       }
 
@@ -284,16 +304,17 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         log('[ICE STATE] ⚠️ Disconnected (transient) — waiting for recovery');
       }
 
-      // ── CHANGED: Add 10 second delay before giving up ──
-      // This gives TURN relay candidates time to be exchanged and tested
       if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
-        log('[ICE STATE] ❌ Failed — waiting 10s before hanging up');
-        await Future.delayed(const Duration(seconds: 10));
-        // Check state again — it may have recovered
-        if (_isHangingUp) return;
-        final currentState = await _peerConnection?.getStats();
-        log('[ICE STATE] Hanging up after timeout');
-        if (mounted) _hangUp();
+        _iceFailureCount++;
+        if (_iceFailureCount < 3) {
+          log(
+            '[ICE STATE] ❌ Failed — restarting ICE attempt $_iceFailureCount of 3',
+          );
+          await _peerConnection?.restartIce();
+        } else {
+          log('[ICE STATE] ❌ Failed 3 times — hanging up');
+          if (mounted) _hangUp();
+        }
       }
     };
 

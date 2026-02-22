@@ -45,12 +45,28 @@ class _LandingPageState extends ConsumerState<LandingPage> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
-        title: const Text('LinkUp', style: AppTextStyles.title),
-        centerTitle: true,
-        actions: const [
+        elevation: 0,
+        centerTitle: false,
+        titleSpacing: 20,
+        title: Text(
+          'LinkUp',
+          style: AppTextStyles.title.copyWith(fontSize: 24),
+        ),
+        actions: [
           Padding(
-            padding: EdgeInsets.only(right: 20),
-            child: Icon(Icons.notifications_none_rounded),
+            padding: const EdgeInsets.only(right: 20),
+            child: Container(
+              height: 40,
+              width: 40,
+              decoration: const BoxDecoration(
+                color: AppColors.iconBackground,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.notifications_none_rounded,
+                color: AppColors.textPrimary,
+              ),
+            ),
           ),
         ],
       ),
@@ -63,140 +79,168 @@ class _LandingPageState extends ConsumerState<LandingPage> {
         error: (error, stack) =>
             AppErrorWidget(provider: userPhoneNumberProvider),
         data: (randomNumber) => SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 10.0),
-                  child: Text('Your Number', style: AppTextStyles.subtitle),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final horizontalPadding = (constraints.maxWidth >= 600)
+                  ? 32.0
+                  : 20.0;
+              return SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding,
+                  vertical: 12,
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 25,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        randomNumber,
-                        style: AppTextStyles.title.copyWith(fontSize: 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    const Text(
+                      'YOUR NUMBER',
+                      style: AppTextStyles.sectionLabel,
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(18),
                       ),
-                      IconButton(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: randomNumber));
-                        },
-                        icon: const Icon(
-                          Icons.copy_rounded,
-                          color: AppColors.textSecondary,
-                        ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              randomNumber,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.title.copyWith(fontSize: 30),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(
+                                ClipboardData(text: randomNumber),
+                              );
+                            },
+                            child: Container(
+                              height: 48,
+                              width: 48,
+                              decoration: BoxDecoration(
+                                color: AppColors.iconBackground,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(
+                                Icons.copy_rounded,
+                                color: AppColors.linkBlue,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 25),
-                const Text('Recent Contacts', style: AppTextStyles.subtitle),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: AppColors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Add New Button
-                        Column(
-                          children: [
-                            GestureDetector(
-                              onTap: () =>
-                                  _addNewContact(context, randomNumber),
-                              child: CircleAvatar(
-                                radius: 32,
-                                backgroundColor: AppColors.primaryBlue
-                                    .withOpacity(0.1),
-                                child: Container(
-                                  height: 48,
-                                  width: 48,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        AppColors.primaryBlue,
-                                        Color(0xFF8ECAFF),
-                                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    const Text(
+                      'RECENT CONTACTS',
+                      style: AppTextStyles.sectionLabel,
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      height: 132,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          return ref
+                              .watch(userContactProvider)
+                              .when(
+                                skipLoadingOnRefresh: false,
+                                skipLoadingOnReload: false,
+                                data: (contacts) {
+                                  return ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 18,
                                     ),
-                                  ),
-                                  child: const Icon(
-                                    Icons.add_rounded,
-                                    color: Colors.white,
-                                    size: 28,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Add New',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 20),
-                        // Contacts List
-                        Consumer(
-                          builder: (context, ref, _) {
-                            return ref
-                                .watch(userContactProvider)
-                                .when(
-                                  skipLoadingOnRefresh: false,
-                                  skipLoadingOnReload: false,
-                                  data: (contacts) {
-                                    if (contacts.isEmpty) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return SizedBox(
-                                      height: 90,
-                                      child: ListView.builder(
-                                        shrinkWrap: true,
-                                        scrollDirection: Axis.horizontal,
-                                        physics:
-                                            const NeverScrollableScrollPhysics(),
-                                        itemCount: contacts.length,
-                                        itemBuilder: (context, index) {
-                                          final contact = contacts[index];
-                                          return Column(
-                                            children: [
-                                              Stack(
-                                                children: [
-                                                  CircleAvatar(
-                                                    radius: 32,
-                                                    backgroundColor: AppColors
-                                                        .primaryBlue
-                                                        .withOpacity(0.2),
+                                    itemCount: contacts.length + 1,
+                                    itemBuilder: (context, index) {
+                                      if (index == 0) {
+                                        return Column(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () => _addNewContact(
+                                                context,
+                                                randomNumber,
+                                              ),
+                                              child: Container(
+                                                height: 64,
+                                                width: 64,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: AppColors.primaryBlue
+                                                      .withOpacity(0.06),
+                                                  border: Border.all(
+                                                    color: AppColors.primaryBlue
+                                                        .withOpacity(0.35),
+                                                    width: 2,
+                                                  ),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.add_rounded,
+                                                  color: AppColors.linkBlue,
+                                                  size: 30,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            const SizedBox(
+                                              width: 72,
+                                              child: Text(
+                                                'Add New',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.textPrimary,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      }
+
+                                      final contact = contacts[index - 1];
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 16,
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Stack(
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.all(
+                                                    2,
+                                                  ),
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        color: AppColors
+                                                            .primaryBlue,
+                                                      ),
+                                                  child: CircleAvatar(
+                                                    radius: 30,
+                                                    backgroundColor:
+                                                        AppColors.surface,
                                                     child: ClipOval(
                                                       child: Image.network(
                                                         contact.profilePicture,
-                                                        width: 64,
-                                                        height: 64,
+                                                        width: 60,
+                                                        height: 60,
                                                         fit: BoxFit.cover,
                                                         errorBuilder:
                                                             (
@@ -209,7 +253,7 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                                                                     .person_2_outlined,
                                                                 color: AppColors
                                                                     .primaryBlue,
-                                                                size: 32,
+                                                                size: 30,
                                                               );
                                                             },
                                                         loadingBuilder:
@@ -222,90 +266,137 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                                                                   null) {
                                                                 return child;
                                                               }
-                                                              return const CircularProgressIndicator(
-                                                                strokeWidth: 2,
+                                                              return const Center(
+                                                                child:
+                                                                    CircularProgressIndicator(
+                                                                      strokeWidth:
+                                                                          2,
+                                                                    ),
                                                               );
                                                             },
                                                       ),
                                                     ),
                                                   ),
-                                                  Positioned(
-                                                    bottom: 0,
-                                                    right: 0,
-                                                    child: GestureDetector(
-                                                      onTap: () {
-                                                        _editUserDetails(
-                                                          context,
-                                                          ref,
-                                                          contact,
-                                                        );
-                                                      },
-                                                      child: const CircleAvatar(
-                                                        radius: 11,
+                                                ),
+                                                Positioned(
+                                                  bottom: 0,
+                                                  right: 0,
+                                                  child: GestureDetector(
+                                                    onTap: () {
+                                                      _editUserDetails(
+                                                        context,
+                                                        ref,
+                                                        contact,
+                                                      );
+                                                    },
+                                                    child: const CircleAvatar(
+                                                      radius: 11,
+                                                      backgroundColor:
+                                                          AppColors.white,
+                                                      child: CircleAvatar(
+                                                        radius: 9,
                                                         backgroundColor:
-                                                            AppColors.white,
-
-                                                        child: CircleAvatar(
-                                                          radius: 9,
-                                                          backgroundColor:
-                                                              AppColors
-                                                                  .primaryBlue,
-                                                          child: Icon(
-                                                            Icons.edit,
-                                                            color: Colors.white,
-                                                            size: 11,
-                                                          ),
+                                                            AppColors.linkBlue,
+                                                        child: Icon(
+                                                          Icons.edit,
+                                                          color: Colors.white,
+                                                          size: 11,
                                                         ),
                                                       ),
                                                     ),
                                                   ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 8),
-                                              SizedBox(
-                                                width: 64,
-                                                child: Text(
-                                                  contact.name,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w600,
-                                                    color:
-                                                        AppColors.textPrimary,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  textAlign: TextAlign.center,
                                                 ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            SizedBox(
+                                              width: 72,
+                                              child: Text(
+                                                contact.name,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.textPrimary,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
                                               ),
-                                            ],
-                                          );
-                                        },
-                                      ),
-                                    );
-                                  },
-                                  loading: () => const Center(
-                                    child: CircularProgressIndicator(
-                                      color: AppColors.primaryBlue,
-                                    ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                                loading: () => const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.primaryBlue,
                                   ),
-                                  error: (err, stack) => AppErrorWidget(
-                                    provider: userContactProvider,
-                                  ),
-                                );
-                          },
-                        ),
-                      ],
+                                ),
+                                error: (err, stack) => AppErrorWidget(
+                                  provider: userContactProvider,
+                                ),
+                              );
+                        },
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 22),
+                    const Text(
+                      'RECENT CALLS',
+                      style: AppTextStyles.sectionLabel,
+                    ),
+                    const SizedBox(height: 40),
+                    Center(
+                      child: Column(
+                        children: [
+                          Container(
+                            height: 80,
+                            width: 80,
+                            decoration: BoxDecoration(
+                              color: AppColors.divider.withOpacity(0.35),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.call_outlined,
+                              color: AppColors.textFooter,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            'No calls yet',
+                            style: AppTextStyles.subtitle.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const SizedBox(
+                            width: 220,
+                            child: Text(
+                              'Calls you make or receive will appear here.',
+                              style: AppTextStyles.body,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextButton(
+                            onPressed: () {},
+                            child: const Text(
+                              'Start a call',
+                              style: AppTextStyles.link,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 80),
+                  ],
                 ),
-                const SizedBox(height: 15),
-                const Text('Recent Calls', style: AppTextStyles.subtitle),
-                const SizedBox(height: 10),
-                const Text('No calls yet', style: AppTextStyles.footer),
-                const SizedBox(height: 60),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -322,7 +413,7 @@ class _LandingPageState extends ConsumerState<LandingPage> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 30),
         child: SingleChildScrollView(
@@ -365,7 +456,7 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                   hintText: 'Enter new name',
                   prefixIcon: const Icon(
                     Icons.person_outline_rounded,
-                    color: AppColors.primaryBlue,
+                    color: AppColors.linkBlue,
                     size: 22,
                   ),
                   hintStyle: AppTextStyles.footer.copyWith(fontSize: 14),
@@ -375,14 +466,12 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: AppColors.primaryBlue.withOpacity(0.1),
-                    ),
+                    borderSide: const BorderSide(color: AppColors.linkBlue),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: const BorderSide(
-                      color: AppColors.primaryBlue,
+                      color: AppColors.linkBlue,
                       width: 1.5,
                     ),
                   ),
@@ -470,7 +559,7 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryBlue,
+                      backgroundColor: AppColors.linkBlue,
                       foregroundColor: AppColors.white,
                       padding: const EdgeInsets.all(16),
                       shape: RoundedRectangleBorder(
@@ -504,7 +593,7 @@ class _LandingPageState extends ConsumerState<LandingPage> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 30),
         child: SingleChildScrollView(
@@ -590,13 +679,13 @@ class _LandingPageState extends ConsumerState<LandingPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
         decoration: BoxDecoration(
-          color: AppColors.background.withOpacity(0.5),
+          color: AppColors.iconBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.primaryBlue.withOpacity(0.1)),
+          border: Border.all(color: AppColors.linkBlue.withOpacity(0.18)),
         ),
         child: Row(
           children: [
-            Icon(icon, color: AppColors.primaryBlue, size: 22),
+            Icon(icon, color: AppColors.linkBlue, size: 22),
             const SizedBox(width: 12),
             Text(
               label,
@@ -608,7 +697,7 @@ class _LandingPageState extends ConsumerState<LandingPage> {
             const Spacer(),
             const Icon(
               Icons.chevron_right_rounded,
-              color: AppColors.textFooter,
+              color: AppColors.textSecondary,
               size: 18,
             ),
           ],

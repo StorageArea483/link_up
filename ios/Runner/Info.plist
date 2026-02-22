@@ -30,10 +30,10 @@
 </array>
 
 <key>NSMicrophoneUsageDescription</key>
-<string>This app needs access to your microphone to record voice messages for chat.</string>
+<string>LinkUp needs access to your microphone for voice messages and for HD audio calls.</string>
 
 <key>NSCameraUsageDescription</key>
-<string>This app needs access to your camera to take photos for chat messages.</string>
+<string>LinkUp needs access to your camera for taking photos and for video calls.</string>
 
 <key>NSPhotoLibraryUsageDescription</key>
 <string>This app needs access to your photo library to select images for chat messages.</string>

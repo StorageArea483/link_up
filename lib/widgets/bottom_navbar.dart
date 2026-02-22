@@ -54,7 +54,8 @@ class BottomNavbar extends StatelessWidget {
         } else if (index == 1) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (context) => const CheckConnection(child: MeetingsPage()),
+              builder: (context) =>
+                  const CheckConnection(child: MeetingsPage()),
             ),
           );
         } else if (index == 2) {

@@ -63,52 +63,39 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   final Map<String, dynamic> _iceServers = {
     'iceServers': [
-      // ─── STUN servers (Google — always free, never expire) ───
-      {'urls': 'stun:stun.l.google.com:19302'},
-      {'urls': 'stun:stun1.l.google.com:19302'},
-      {'urls': 'stun:stun2.l.google.com:19302'},
-      {'urls': 'stun:stun3.l.google.com:19302'},
-      {'urls': 'stun:stun4.l.google.com:19302'},
-
-      // ─── FreeStn (zero signup, always free) ───
+      {'urls': 'stun:stun.relay.metered.ca:80'},
+      // ─── TCP 443 FIRST (works on mobile data) ───
       {
-        'urls': 'turn:freestun.net:3478',
-        'username': 'free',
-        'credential': 'free',
+        'urls': 'turns:global.relay.metered.ca:443?transport=tcp',
+        'username': '7f8b9b1946d721c33e99c3aa',
+        'credential': '86E+l491PG2uX7JQ',
       },
+      {
+        'urls': 'turn:global.relay.metered.ca:443?transport=tcp',
+        'username': '7f8b9b1946d721c33e99c3aa',
+        'credential': '86E+l491PG2uX7JQ',
+      },
+      {
+        'urls': 'turn:global.relay.metered.ca:443',
+        'username': '7f8b9b1946d721c33e99c3aa',
+        'credential': '86E+l491PG2uX7JQ',
+      },
+      // ─── UDP (works on WiFi) ───
+      {
+        'urls': 'turn:global.relay.metered.ca:80',
+        'username': '7f8b9b1946d721c33e99c3aa',
+        'credential': '86E+l491PG2uX7JQ',
+      },
+      {
+        'urls': 'turn:global.relay.metered.ca:80?transport=tcp',
+        'username': '7f8b9b1946d721c33e99c3aa',
+        'credential': '86E+l491PG2uX7JQ',
+      },
+      {'urls': 'stun:stun.l.google.com:19302'},
       {
         'urls': 'turns:freestun.net:5349',
         'username': 'free',
         'credential': 'free',
-      },
-
-      // ─── ExpressTURN (your current one) ───
-      {
-        'urls': 'turn:free.expressturn.com:3478',
-        'username': '00000000002087100762',
-        'credential': 'K2niWENTKTeRYmv/g+H2oWhLRBM=',
-      },
-
-      // ─── Open Relay Project by Metered (free, global) ───
-      {
-        'urls': 'turn:openrelay.metered.ca:80',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-      {
-        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
-      },
-      {
-        'urls': 'turns:openrelay.metered.ca:443',
-        'username': 'openrelayproject',
-        'credential': 'openrelayproject',
       },
     ],
   };
@@ -176,19 +163,13 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   }
 
   Future<void> _initCall() async {
-    log(
-      '=== [INIT] Starting _initCall | role=${widget.isCaller ? "CALLER" : "CALLEE"} isVideo=${widget.isVideo} ===',
-    );
-
     // 1. Init renderers
     try {
       if (!mounted) return;
       await _localRenderer.initialize();
       if (!mounted) return;
       await _remoteRenderer.initialize();
-      log('[INIT] ✅ Renderers initialized');
     } catch (e) {
-      log('[INIT] ❌ Renderer init failed: $e');
       _showError('Failed to initialize video. Please try again.');
       _safePop();
       return;
@@ -205,13 +186,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       });
       if (!mounted) return;
       _localRenderer.srcObject = _localStream;
-      log(
-        '[INIT] ✅ Local media acquired | '
-        'audioTracks=${_localStream!.getAudioTracks().length} '
-        'videoTracks=${_localStream!.getVideoTracks().length}',
-      );
     } catch (e) {
-      log('[INIT] ❌ getUserMedia failed: $e');
       _showError(
         'Could not access your '
         '${widget.isVideo ? 'camera and microphone' : 'microphone'}. '
@@ -225,19 +200,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     try {
       if (!mounted) return;
       _peerConnection = await createPeerConnection(_iceServers);
-      log('[INIT] ✅ PeerConnection created');
-      // ── TURN REACHABILITY TEST ──
-      log('🔬 [TURN TEST] Starting — watch for typ relay candidates');
-      _peerConnection!.onIceCandidate = (RTCIceCandidate c) {
-        if (c.candidate != null) {
-          log('🔬 [TURN TEST] candidate: ${c.candidate}');
-          if (c.candidate!.contains('typ relay')) {
-            log('🔬 [TURN TEST] ✅ TURN IS WORKING — relay candidate found!');
-          }
-        }
-      };
     } catch (e) {
-      log('[INIT] ❌ createPeerConnection failed: $e');
       _showError('Failed to establish connection. Please try again.');
       _safePop();
       return;
@@ -248,9 +211,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       try {
         if (!mounted) return;
         await _peerConnection!.addTrack(track, _localStream!);
-        log('[INIT] ✅ Local track added → kind=${track.kind} id=${track.id}');
       } catch (e) {
-        log('[INIT] ❌ addTrack failed: $e');
         _showError('Failed to set up media tracks. Please try again.');
         _safePop();
         return;
@@ -283,16 +244,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
           _remoteRenderer.srcObject = stream;
         });
         ref.read(callProvider.notifier).isConnected = true;
-        log('[onTrack] ✅ Remote renderer attached + isConnected = true');
       }
     };
 
     // 6. ICE connection state — full diagnostic logging
-    // 6. ICE connection state — full diagnostic logging
     _peerConnection!
         .onIceConnectionState = (RTCIceConnectionState state) async {
-      log('🧊 [ICE STATE] → $state');
-
       if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
           state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
         log('[ICE STATE] ✅ Connected — enabling speakerphone');
@@ -350,10 +307,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   Future<void> _startCall() async {
     log('=== [CALLER] _startCall begin ===');
     try {
-      final offer = await _peerConnection!.createOffer({
-        'offerToReceiveAudio': true,
-        'offerToReceiveVideo': widget.isVideo,
-      });
+      final offer = await _peerConnection!.createOffer();
       log(
         '[CALLER] ✅ Offer created | type=${offer.type} sdpLen=${offer.sdp?.length ?? 0}',
       );
@@ -531,10 +485,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         ).catchError((e) => log('[ICE][callee] ❌ Send failed: $e'));
       };
 
-      final answer = await _peerConnection!.createAnswer({
-        'offerToReceiveAudio': true,
-        'offerToReceiveVideo': widget.isVideo,
-      });
+      final answer = await _peerConnection!.createAnswer();
       log(
         '[CALLEE] ✅ Answer created | type=${answer.type} sdpLen=${answer.sdp?.length ?? 0}',
       );

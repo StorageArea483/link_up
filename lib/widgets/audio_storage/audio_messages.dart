@@ -715,6 +715,7 @@ class AudioPreviewWidget extends ConsumerWidget {
                 );
 
                 return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(handler.formatDuration(position)),
                     Slider(

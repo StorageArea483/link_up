@@ -27,6 +27,8 @@ class _UserChatsState extends ConsumerState<UserChats>
     with WidgetsBindingObserver {
   StreamSubscription? messageSubscription;
 
+  String? currentUserId;
+
   @override
   void initState() {
     super.initState();
@@ -98,7 +100,7 @@ class _UserChatsState extends ConsumerState<UserChats>
       if (mounted) {
         ref.invalidate(userContactProvider);
 
-        final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+        currentUserId = FirebaseAuth.instance.currentUser?.uid;
         if (currentUserId != null && mounted) {
           try {
             final contacts = await ref.read(userContactProvider.future);
@@ -154,7 +156,7 @@ class _UserChatsState extends ConsumerState<UserChats>
 
   void _subscribeToMessages() {
     try {
-      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      currentUserId = FirebaseAuth.instance.currentUser?.uid;
       if (currentUserId == null) return;
 
       // Cancel existing subscription if it exists
@@ -204,12 +206,14 @@ class _UserChatsState extends ConsumerState<UserChats>
 
   Future<void> _initialize() async {
     if (mounted) {
-      ref.read(navigationProvider.notifier).state = 'null';
+      ref.read(navigationProvider.notifier).state = null;
+      ref.invalidate(userContactProvider);
     }
-    if (!mounted) return;
-    ref.invalidate(userContactProvider);
-
-    _subscribeToMessages();
+    if (messageSubscription == null) {
+      _subscribeToMessages();
+    } else if (messageSubscription!.isPaused) {
+      messageSubscription!.resume();
+    }
 
     // Check initial network connectivity
     try {
@@ -225,7 +229,7 @@ class _UserChatsState extends ConsumerState<UserChats>
     }
 
     // Pre-warm the providers and invalidate per-contact providers for fresh data
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    currentUserId = FirebaseAuth.instance.currentUser?.uid;
     if (currentUserId != null && mounted) {
       try {
         // This will trigger the providers to start loading data
@@ -261,7 +265,7 @@ class _UserChatsState extends ConsumerState<UserChats>
           ref.invalidate(userContactProvider);
 
           // Also refresh all contact providers to ensure fresh data
-          final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+          currentUserId = FirebaseAuth.instance.currentUser?.uid;
           if (currentUserId != null && mounted) {
             ref.read(userContactProvider.future).then((contacts) {
               for (final contact in contacts) {
@@ -373,6 +377,9 @@ class _UserChatsState extends ConsumerState<UserChats>
                                   );
                                   final int unreadCount =
                                       unreadCountAsync.value ?? 0;
+                                  if (currentUserId == null) {
+                                    return const SizedBox.shrink();
+                                  }
 
                                   return Stack(
                                     clipBehavior: Clip.none,
@@ -428,6 +435,47 @@ class _UserChatsState extends ConsumerState<UserChats>
                                                 color: Colors.white,
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      if (ref.watch(
+                                        isOnlineProvider(
+                                          ChatService.generateChatId(
+                                            currentUserId!,
+                                            contact.uid,
+                                          ),
+                                        ),
+                                      ))
+                                        Positioned(
+                                          right: 2,
+                                          bottom: 2,
+                                          child: Container(
+                                            width: 14,
+                                            height: 14,
+                                            decoration: BoxDecoration(
+                                              color: AppColors.onlineGreen,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: AppColors.white,
+                                                width: 2,
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      else
+                                        Positioned(
+                                          right: 2,
+                                          bottom: 2,
+                                          child: Container(
+                                            width: 14,
+                                            height: 14,
+                                            decoration: BoxDecoration(
+                                              color: AppColors.offlineGrey,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: AppColors.white,
+                                                width: 2,
                                               ),
                                             ),
                                           ),

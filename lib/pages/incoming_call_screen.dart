@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:link_up/pages/call_screen.dart';
 import 'package:link_up/services/call_service.dart';
 import 'package:link_up/styles/styles.dart';
+import 'package:link_up/widgets/check_connection.dart';
 
-class IncomingCallScreen extends StatelessWidget {
+class IncomingCallScreen extends StatefulWidget {
   final String callId;
   final String callerName;
   final String callerId;
@@ -19,6 +20,11 @@ class IncomingCallScreen extends StatelessWidget {
     required this.isVideo,
   });
 
+  @override
+  State<IncomingCallScreen> createState() => _IncomingCallScreenState();
+}
+
+class _IncomingCallScreenState extends State<IncomingCallScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -38,7 +44,7 @@ class IncomingCallScreen extends StatelessWidget {
 
             // ── Caller Name ──
             Text(
-              callerName,
+              widget.callerName,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 28,
@@ -49,7 +55,9 @@ class IncomingCallScreen extends StatelessWidget {
 
             // ── Call Type Label ──
             Text(
-              isVideo ? 'Incoming Video Call...' : 'Incoming Audio Call...',
+              widget.isVideo
+                  ? 'Incoming Video Call...'
+                  : 'Incoming Audio Call...',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.7),
                 fontSize: 18,
@@ -70,7 +78,7 @@ class IncomingCallScreen extends StatelessWidget {
                     label: 'Reject',
                     color: Colors.red,
                     onTap: () async {
-                      await CallService.endCall(callId);
+                      await CallService.endCall(widget.callId);
                       if (context.mounted && Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
                       }
@@ -79,21 +87,41 @@ class IncomingCallScreen extends StatelessWidget {
 
                   // Accept
                   _buildActionButton(
-                    icon: isVideo ? Icons.videocam : Icons.call,
+                    icon: widget.isVideo ? Icons.videocam : Icons.call,
                     label: 'Accept',
                     color: Colors.green,
-                    onTap: () {
+                    onTap: () async {
+                      final isActive = await CallService.isCallActive(
+                        widget.callId,
+                      );
+                      if (!isActive) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Call ended.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          if (context.mounted &&
+                              Navigator.of(context).canPop()) {
+                            Navigator.of(context).pop();
+                          }
+                        }
+                        return;
+                      }
                       // Navigate to CallScreen as callee
                       Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
-                          builder: (context) => CallScreen(
-                            calleeId: callerId,
-                            calleeName: callerName,
-                            calleeProfilePicture: '',
-                            isVideo: isVideo,
-                            isCaller: false,
-                            callId: callId,
-                            remoteOffer: offer,
+                          builder: (context) => CheckConnection(
+                            child: CallScreen(
+                              calleeId: widget.callerId,
+                              calleeName: widget.callerName,
+                              calleeProfilePicture: '',
+                              isVideo: widget.isVideo,
+                              isCaller: false,
+                              callId: widget.callId,
+                              remoteOffer: widget.offer,
+                            ),
                           ),
                         ),
                       );

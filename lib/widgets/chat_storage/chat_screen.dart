@@ -51,6 +51,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   final player = AudioPlayer();
   late final AudioMessagesHandler _audioHandler;
 
+  bool _isTearingDown = false;
+
   // Helper method to merge messages without losing any
   List<Message> _mergeMessages(
     List<Message> newMessages,
@@ -81,7 +83,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     // Add lifecycle observer
     WidgetsBinding.instance.addObserver(this);
-
     // Initialize audio components immediately (synchronously)
     _record = AudioRecorder();
     _audioHandler = AudioMessagesHandler(
@@ -117,6 +118,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void dispose() {
     // Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
+
+    _isTearingDown = true;
 
     _messageController.dispose();
     messageSubscription?.cancel();
@@ -537,11 +540,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       messageSubscription?.cancel();
 
       messageSubscription = ChatService.subscribeToMessages(chatId, (response) {
-        if (!mounted) return;
+        if (_isTearingDown || !mounted) return;
         try {
           final newMessage = Message.fromJson(response.payload);
 
-          if (!mounted) return;
+          if (_isTearingDown || !mounted) return;
           final currentMessages = ref.read(messagesProvider(chatId));
 
           // Check if this is an update to an existing message or a new message
@@ -552,7 +555,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           if (existingIndex != -1) {
             final updatedMessages = [...currentMessages];
             updatedMessages[existingIndex] = newMessage;
-            if (!mounted) return;
+            if (_isTearingDown || !mounted) return;
             ref.read(messagesProvider(chatId).notifier).state = updatedMessages;
 
             if (newMessage.status == 'delivered') {
@@ -560,7 +563,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             }
           } else {
             // New message received
-            if (!mounted) return;
+            if (_isTearingDown || !mounted) return;
             ref.read(messagesProvider(chatId).notifier).state = [
               newMessage,
               ...currentMessages,
@@ -973,7 +976,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         try {
           if (response.payload['userId'] != currentUserId) {
             if (!mounted) return;
-            ref.read(isTypingProvider.notifier).state =
+            ref.read(isTypingProvider(chatId).notifier).state =
                 response.payload['isTyping'] ?? false;
           }
         } catch (e) {
@@ -1006,11 +1009,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               response.payload['online'] ??
               false; // checking the receiver status
           if (!mounted) return;
-          final wasOnlineBefore = ref.read(isOnlineProvider);
+          final wasOnlineBefore = ref.read(isOnlineProvider(_chatId!));
 
           // Now update the provider with the NEW status
           if (!mounted) return;
-          ref.read(isOnlineProvider.notifier).state =
+          ref.read(isOnlineProvider(_chatId!).notifier).state =
               isOnline; // provider for updating the receiver online/offline status
 
           // Detect transition: Contact just came online (was offline, now online)
@@ -1048,13 +1051,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         // If no presence record exists, assume user is offline
         final isOnline = presence?.data['online'] ?? false;
 
-        ref.read(isOnlineProvider.notifier).state =
+        ref.read(isOnlineProvider(_chatId!).notifier).state =
             isOnline; // provider for updating the online/offline status of the other user
       }
     } catch (e) {
       // On error, assume user is offline
       if (mounted) {
-        ref.read(isOnlineProvider.notifier).state = false;
+        ref.read(isOnlineProvider(_chatId!).notifier).state = false;
       }
     }
   }
@@ -1300,8 +1303,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             if (didPop) return;
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
-                builder: (context) =>
-                    const CheckConnection(child: LandingPage()),
+                builder: (context) => const CheckConnection(
+                  child: CheckConnection(child: LandingPage()),
+                ),
               ),
             );
           },
@@ -1311,7 +1315,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               child: Column(
                 children: [
                   _buildHeader(),
-                  _buildMessagesList(),
+                  Expanded(child: _buildMessagesList()),
                   _buildInputSection(),
                 ],
               ),
@@ -1374,7 +1378,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         }
 
         if (!mounted) return;
-        ref.read(isOnlineProvider.notifier).state = true;
+        ref.read(isOnlineProvider(_chatId!).notifier).state = true;
         final chatId = ref.read(chatIdProvider);
         if (chatId != null) {
           try {
@@ -1425,7 +1429,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         presenceSubscription?.pause();
 
         if (mounted) {
-          ref.read(isOnlineProvider.notifier).state =
+          ref.read(isOnlineProvider(_chatId!).notifier).state =
               false; // update the receiver online status to offline
         }
       }
@@ -1549,6 +1553,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   // Build header with contact info
   Widget _buildHeader() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         // Network status banner (only shown when sender is offline)
         Consumer(
@@ -1592,7 +1597,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   color: AppColors.textPrimary,
                 ),
                 onPressed: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const UserChats()),
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        const CheckConnection(child: UserChats()),
+                  ),
                 ),
               ),
               CircleAvatar(
@@ -1616,6 +1624,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -1624,8 +1633,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     ),
                     Consumer(
                       builder: (context, ref, _) {
-                        final isTyping = ref.watch(isTypingProvider);
-                        final isContactOnline = ref.watch(isOnlineProvider);
+                        final chatId = ref.watch(chatIdProvider) ?? _chatId;
+                        if (chatId == null) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final isTyping = ref.watch(isTypingProvider(chatId));
+                        final isContactOnline = ref.watch(
+                          isOnlineProvider(chatId),
+                        );
 
                         // Show only online/offline status or typing indicator
                         return Text(
@@ -1676,18 +1692,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final chatId = ref.watch(chatIdProvider);
 
     if (isLoading) {
-      return const Expanded(
-        child: Center(
-          child: CircularProgressIndicator(color: AppColors.primaryBlue),
-        ),
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryBlue),
       );
     }
 
     if (currentUserId == null || chatId == null) {
-      return const Expanded(
-        child: Center(
-          child: Text('Unable to load messages', style: AppTextStyles.footer),
-        ),
+      return const Center(
+        child: Text('Unable to load messages', style: AppTextStyles.footer),
       );
     }
 
@@ -1696,50 +1708,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final isOnline = networkOnlineAsync.value ?? true;
 
     if (messages.isEmpty) {
-      return Expanded(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                isOnline
-                    ? Icons.chat_bubble_outline_rounded
-                    : Icons.cloud_off_rounded,
-                size: 64,
-                color: AppColors.textFooter,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                isOnline ? 'No messages yet' : 'No internet connection',
-                style: AppTextStyles.footer,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isOnline
-                    ? 'Send a message to start chatting'
-                    : 'Connect to the internet to load messages',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textFooter,
-                ),
-              ),
-            ],
-          ),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isOnline
+                  ? Icons.chat_bubble_outline_rounded
+                  : Icons.cloud_off_rounded,
+              size: 64,
+              color: AppColors.textFooter,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isOnline ? 'No messages yet' : 'No internet connection',
+              style: AppTextStyles.footer,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isOnline
+                  ? 'Send a message to start chatting'
+                  : 'Connect to the internet to load messages',
+              style: const TextStyle(fontSize: 12, color: AppColors.textFooter),
+            ),
+          ],
         ),
       );
     }
 
-    return Expanded(
-      child: ListView.builder(
-        reverse: true,
-        padding: const EdgeInsets.all(16),
-        itemCount: messages.length,
-        itemBuilder: (context, index) {
-          final message = messages[index];
-          final isSentByMe = message.isSentByMe(currentUserId);
-          return _buildMessageBubble(message, isSentByMe);
-        },
-      ),
+    return ListView.builder(
+      reverse: true,
+      padding: const EdgeInsets.all(16),
+      itemCount: messages.length,
+      itemBuilder: (context, index) {
+        final message = messages[index];
+        final isSentByMe = message.isSentByMe(currentUserId);
+        return _buildMessageBubble(message, isSentByMe);
+      },
     );
   }
 
@@ -1769,6 +1775,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (message.imageId != null)

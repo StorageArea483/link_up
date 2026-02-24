@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:link_up/providers/navigation_provider.dart';
 
@@ -232,11 +233,11 @@ class NotificationService {
   }
 
   // Listen for foreground FCM messages and show local notification
-  void listenToForegroundMessages(dynamic ref) {
+  void listenToForegroundMessages(ProviderContainer container) {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final notification = message.notification;
       final messageStatus = message.data['status'];
-      final activeChatStatus = ref.read(navigationProvider);
+      final activeChatStatus = container.read(navigationProvider);
       if (messageStatus == 'delivered' || activeChatStatus == 'chat') {
         return;
       }

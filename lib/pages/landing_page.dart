@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/providers/loading_provider.dart';
-import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/providers/random_num_provider.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/add_new_contact/qr_code.dart';
@@ -13,6 +12,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:link_up/providers/user_contacts_provider.dart';
 import 'package:link_up/models/user_contacts.dart';
+import 'package:link_up/widgets/check_connection.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 
@@ -24,20 +24,6 @@ class LandingPage extends ConsumerStatefulWidget {
 }
 
 class _LandingPageState extends ConsumerState<LandingPage> {
-  @override
-  void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initialize();
-    });
-    super.initState();
-  }
-
-  void _initialize() {
-    if (mounted) {
-      ref.read(navigationProvider.notifier).state = 'null';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final phoneAsync = ref.watch(userPhoneNumberProvider);
@@ -623,7 +609,8 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                   Navigator.pop(context);
                   Navigator.of(context).pushReplacement(
                     MaterialPageRoute(
-                      builder: (context) => const PhoneNumber(),
+                      builder: (context) =>
+                          const CheckConnection(child: PhoneNumber()),
                     ),
                   );
                 },
@@ -647,7 +634,10 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (context) => const QrCode()),
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          const CheckConnection(child: QrCode()),
+                    ),
                   );
                 },
               ),
@@ -658,7 +648,10 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (context) => const QrScanner()),
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          const CheckConnection(child: QrScanner()),
+                    ),
                   );
                 },
               ),

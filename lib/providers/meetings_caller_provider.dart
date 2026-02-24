@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 class Notifier extends StateNotifier<AppState> {
   Notifier() : super(AppState(value: '', isChanged: false));
-  
+
   void search(String newValue) {
     state = state.copyWith(value: newValue);
   }
@@ -10,7 +10,6 @@ class Notifier extends StateNotifier<AppState> {
   void toggleChanged() {
     state = state.copyWith(isChanged: !state.isChanged);
   }
-  
 }
 
 class AppState {
@@ -27,4 +26,6 @@ class AppState {
   }
 }
 
-final meetingsProvider = StateNotifierProvider<Notifier, AppState>((ref) => Notifier());
+final meetingsProvider = StateNotifierProvider.autoDispose<Notifier, AppState>(
+  (ref) => Notifier(),
+);

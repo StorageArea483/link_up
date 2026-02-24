@@ -7,7 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:link_up/providers/call_providers.dart';
+import 'package:link_up/providers/chat_providers.dart';
+import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/services/call_service.dart';
+import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 
 class CallScreen extends ConsumerStatefulWidget {
@@ -39,6 +42,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   RTCPeerConnection? _peerConnection;
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
+
   MediaStream? _localStream;
 
   // ─── Subscriptions ───
@@ -54,6 +58,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   bool _remoteDescSet = false;
   int _iceFailureCount = 0;
   final Set<String> _remoteCandidateSet = <String>{};
+
+  // ─── Call Duration Timer ───
+  Timer? _callDurationTimer;
   final List<Map<String, dynamic>> _pendingRemoteCandidates = [];
 
   // ─── Current User ───
@@ -97,6 +104,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         'username': 'free',
         'credential': 'free',
       },
+      {
+        'urls': 'turn:free.expressturn.com:3478',
+        'username': '00000000002087100762',
+        'credential': 'K2niWENTKTeRYmv/g+H2oWhLRBM=',
+      },
     ],
   };
 
@@ -119,19 +131,13 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   Map<String, dynamic>? _parseCandidatePayload(dynamic raw) {
     try {
       if (raw is Map<String, dynamic>) {
-        log('[ICE][parse] Payload was already a Map (Appwrite pre-decoded)');
         return raw;
       }
       if (raw is String) {
-        log('[ICE][parse] Payload is a String — running jsonDecode');
         return jsonDecode(raw) as Map<String, dynamic>;
       }
-      log(
-        '[ICE][parse] ⚠️ Unexpected payload type: ${raw.runtimeType} value=$raw',
-      );
       return null;
     } catch (e) {
-      log('[ICE][parse] ❌ Failed to parse candidate payload: $e | raw=$raw');
       return null;
     }
   }
@@ -139,15 +145,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   Future<void> _sendCandidate(RTCIceCandidate candidate) async {
     final id = _resolvedCallId;
     if (id.isEmpty) {
-      log('[ICE][sendCandidate] ⚠️ Skipped — callId is empty');
       return;
     }
     try {
-      log(
-        '[ICE][sendCandidate] → sdpMid=${candidate.sdpMid} '
-        'mLineIndex=${candidate.sdpMLineIndex} '
-        'len=${candidate.candidate?.length ?? 0}',
-      );
       await CallService.addIceCandidate(
         callId: id,
         senderId: _currentUserId,
@@ -163,6 +163,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   }
 
   Future<void> _initCall() async {
+    if (mounted) {
+      ref.read(navigationProvider.notifier).state = null;
+    }
     // 1. Init renderers
     try {
       if (!mounted) return;
@@ -171,7 +174,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       await _remoteRenderer.initialize();
     } catch (e) {
       _showError('Failed to initialize video. Please try again.');
-      _safePop();
+      _safePopMounted();
       return;
     }
 
@@ -192,7 +195,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         '${widget.isVideo ? 'camera and microphone' : 'microphone'}. '
         'Please check your permissions and try again.',
       );
-      _safePop();
+      _safePopMounted();
       return;
     }
 
@@ -202,7 +205,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       _peerConnection = await createPeerConnection(_iceServers);
     } catch (e) {
       _showError('Failed to establish connection. Please try again.');
-      _safePop();
+      _safePopMounted();
       return;
     }
 
@@ -213,7 +216,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         await _peerConnection!.addTrack(track, _localStream!);
       } catch (e) {
         _showError('Failed to set up media tracks. Please try again.');
-        _safePop();
+        _safePopMounted();
         return;
       }
     }
@@ -228,7 +231,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       );
 
       if (event.streams.isEmpty) {
-        log('[onTrack] ⚠️ No streams in event — skipping');
         return;
       }
 
@@ -240,10 +242,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       );
 
       if (mounted) {
-        setState(() {
-          _remoteRenderer.srcObject = stream;
-        });
+        _remoteRenderer.srcObject = stream;
         ref.read(callProvider.notifier).isConnected = true;
+        _startCallTimer();
       }
     };
 
@@ -257,10 +258,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         await Helper.setSpeakerphoneOn(true);
       }
 
-      if (state == RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
-        log('[ICE STATE] ⚠️ Disconnected (transient) — waiting for recovery');
-      }
-
       if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
         _iceFailureCount++;
         if (_iceFailureCount < 3) {
@@ -269,33 +266,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
           );
           await _peerConnection?.restartIce();
         } else {
-          log('[ICE STATE] ❌ Failed 3 times — hanging up');
           if (mounted) _hangUp();
         }
       }
     };
-
-    // 7. ICE gathering state — tells us if candidates are being found
-    _peerConnection!.onIceGatheringState = (RTCIceGatheringState state) {
-      log('🔍 [ICE GATHERING] → $state');
-      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete) {
-        log('[ICE GATHERING] ✅ Gathering complete');
-      }
-    };
-
-    // 8. Signaling state — tells us if SDP exchange is progressing correctly
-    _peerConnection!.onSignalingState = (RTCSignalingState state) {
-      log('📡 [SIGNALING STATE] → $state');
-    };
-
-    // 9. Overall connection state
-    _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
-      log('🔗 [CONNECTION STATE] → $state');
-    };
-
-    log(
-      '[INIT] ✅ All handlers registered — proceeding as ${widget.isCaller ? "CALLER" : "CALLEE"}',
-    );
 
     if (widget.isCaller) {
       await _startCall();
@@ -305,16 +279,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   }
 
   Future<void> _startCall() async {
-    log('=== [CALLER] _startCall begin ===');
     try {
       final offer = await _peerConnection!.createOffer();
-      log(
-        '[CALLER] ✅ Offer created | type=${offer.type} sdpLen=${offer.sdp?.length ?? 0}',
-      );
       if (!mounted) return;
 
       await _peerConnection!.setLocalDescription(offer);
-      log('[CALLER] ✅ setLocalDescription done — ICE gathering now started');
+      // ice gathering starts after setLocalDescription
       if (!mounted) return;
 
       final doc = await CallService.createCall(
@@ -327,30 +297,20 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       if (!mounted) return;
 
       if (doc == null) {
-        log('[CALLER] ❌ createCall returned null');
         _showError('Failed to start the call. Please try again.');
         _safePopMounted();
         return;
       }
 
       _callId = doc.$id;
-      log('[CALLER] ✅ Call document created | callId=$_callId');
-
       // Attach onIceCandidate only after callId is available
       _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) {
         if (candidate.candidate == null) {
-          log('[ICE][caller] End-of-candidates signal received');
           return;
         }
-        log(
-          '[ICE][caller] New candidate | sdpMid=${candidate.sdpMid} '
-          'mLineIndex=${candidate.sdpMLineIndex} '
-          'len=${candidate.candidate!.length}',
-        );
         _sendCandidate(candidate);
       };
     } catch (e) {
-      log('[CALLER] ❌ _startCall failed: $e');
       _showError('Failed to start the call. Please try again.');
       _safePopMounted();
       return;
@@ -361,21 +321,14 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       try {
         final payload = response.payload;
         final status = payload['status'] as String?;
-        log(
-          '[CALLER][callSub] event received | status=$status | keys=${payload.keys.toList()}',
-        );
-
         // Callee hung up
         if (status == 'ended') {
-          log('[CALLER][callSub] status=ended → cleaning up');
           _cleanupAndPop();
           return;
         }
 
         if (status == 'answered') {
-          log('[CALLER][callSub] status=answered → setting remote description');
           final rawAnswer = payload['answer'];
-          log('[CALLER][callSub] raw answer type=${rawAnswer.runtimeType}');
 
           Map<String, dynamic> answerData;
           if (rawAnswer is String) {
@@ -383,32 +336,18 @@ class _CallScreenState extends ConsumerState<CallScreen> {
           } else if (rawAnswer is Map<String, dynamic>) {
             answerData = rawAnswer;
           } else {
-            log(
-              '[CALLER][callSub] ❌ Unexpected answer type: ${rawAnswer.runtimeType}',
-            );
             return;
           }
-
-          log(
-            '[CALLER][callSub] Answer parsed | type=${answerData['type']} '
-            'sdpLen=${(answerData['sdp'] as String).length}',
-          );
-
           _peerConnection
               ?.setRemoteDescription(
                 RTCSessionDescription(answerData['sdp'], answerData['type']),
               )
               .then((_) {
-                log('[CALLER] ✅ setRemoteDescription done');
                 _remoteDescSet = true;
                 _flushPendingCandidates();
-              })
-              .catchError((e) {
-                log('[CALLER] ❌ setRemoteDescription error: $e');
               });
         }
       } catch (e) {
-        log('[CALLER][callSub] ❌ Error: $e');
         _showError('Connection issue. The call may drop.');
       }
     });
@@ -418,45 +357,28 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       response,
     ) {
       try {
-        log('[ICE][caller←callee] Raw payload: ${response.payload}');
         final raw = response.payload['candidate'];
-        log(
-          '[ICE][caller←callee] candidate field | type=${raw.runtimeType} | value=$raw',
-        );
-
         final candidateData = _parseCandidatePayload(raw);
         if (candidateData == null) return;
 
-        _handleRemoteCandidate(candidateData, direction: 'caller←callee');
+        _handleRemoteCandidate(candidateData);
       } catch (e) {
         log('[ICE][caller←callee] ❌ Error: $e');
       }
     });
-
-    log('[CALLER] ✅ Subscriptions active — waiting for callee to answer');
   }
 
   Future<void> _joinCall() async {
-    log('=== [CALLEE] _joinCall begin | callId=${widget.callId} ===');
-
     // Set caller's offer as remote description first
     try {
-      log('[CALLEE] Raw remoteOffer type=${widget.remoteOffer.runtimeType}');
       final offerData = jsonDecode(widget.remoteOffer!);
-      log(
-        '[CALLEE] Offer parsed | type=${offerData['type']} '
-        'sdpLen=${(offerData['sdp'] as String).length}',
-      );
-
       if (!mounted) return;
       await _peerConnection!.setRemoteDescription(
         RTCSessionDescription(offerData['sdp'], offerData['type']),
       );
-      log('[CALLEE] ✅ setRemoteDescription done');
       _remoteDescSet = true;
       _flushPendingCandidates();
     } catch (e) {
-      log('[CALLEE] ❌ setRemoteDescription failed: $e');
       _showError('Failed to connect to the call. Please try again.');
       _safePopMounted();
       return;
@@ -466,14 +388,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       // Attach onIceCandidate after setRemoteDescription
       _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) {
         if (candidate.candidate == null) {
-          log('[ICE][callee] End-of-candidates signal received');
           return;
         }
-        log(
-          '[ICE][callee] New candidate | sdpMid=${candidate.sdpMid} '
-          'mLineIndex=${candidate.sdpMLineIndex} '
-          'len=${candidate.candidate!.length}',
-        );
         CallService.addIceCandidate(
           callId: widget.callId!,
           senderId: _currentUserId,
@@ -482,27 +398,22 @@ class _CallScreenState extends ConsumerState<CallScreen> {
             'sdpMid': candidate.sdpMid,
             'sdpMLineIndex': candidate.sdpMLineIndex,
           }),
-        ).catchError((e) => log('[ICE][callee] ❌ Send failed: $e'));
+        );
       };
 
       final answer = await _peerConnection!.createAnswer();
-      log(
-        '[CALLEE] ✅ Answer created | type=${answer.type} sdpLen=${answer.sdp?.length ?? 0}',
-      );
       if (!mounted) return;
 
       await _peerConnection!.setLocalDescription(answer);
-      log('[CALLEE] ✅ setLocalDescription done — ICE gathering now started');
+      // ice gathering now started
       if (!mounted) return;
 
       await CallService.answerCall(
         callId: widget.callId!,
         answer: jsonEncode({'sdp': answer.sdp, 'type': answer.type}),
       );
-      log('[CALLEE] ✅ Answer sent to Appwrite');
       if (!mounted) return;
     } catch (e) {
-      log('[CALLEE] ❌ _joinCall setup failed: $e');
       _showError('Failed to connect to the call. Please try again.');
       _safePopMounted();
       return;
@@ -513,10 +424,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       try {
         final payload = response.payload;
         final status = payload['status'] as String?;
-        log('[CALLEE][callSub] event received | status=$status');
 
         if (status == 'ended') {
-          log('[CALLEE][callSub] status=ended → cleaning up');
           _cleanupAndPop();
           return;
         }
@@ -531,41 +440,30 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       _currentUserId,
       (response) {
         try {
-          log('[ICE][callee←caller] Raw payload: ${response.payload}');
           final raw = response.payload['candidate'];
-          log(
-            '[ICE][callee←caller] candidate field | type=${raw.runtimeType} | value=$raw',
-          );
 
           final candidateData = _parseCandidatePayload(raw);
           if (candidateData == null) return;
 
-          _handleRemoteCandidate(candidateData, direction: 'callee←caller');
+          _handleRemoteCandidate(candidateData);
         } catch (e) {
           log('[ICE][callee←caller] ❌ Error: $e');
         }
       },
     );
-
-    log('[CALLEE] ✅ Subscriptions active');
   }
 
   Future<void> _hangUp() async {
     if (_isHangingUp) return;
     _isHangingUp = true;
-    log('=== [HANGUP] Initiated ===');
     if (!mounted) return;
     ref.read(loadingProvider.notifier).state = true;
 
     try {
       final id = _resolvedCallId;
       if (id.isNotEmpty) {
-        log('[HANGUP] Ending call id=$id');
         await CallService.endCall(id);
         await CallService.cleanupCall(id);
-        log('[HANGUP] ✅ Call ended and cleaned up');
-      } else {
-        log('[HANGUP] ⚠️ No call ID available');
       }
     } catch (e) {
       log('[HANGUP] ❌ Error: $e');
@@ -575,25 +473,25 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   }
 
   void _cleanupAndPop() {
-    log('[CLEANUP] _cleanupAndPop called');
     if (!_isHangingUp) {
       _isHangingUp = true;
       if (mounted) ref.read(loadingProvider.notifier).state = true;
     }
+
+    _callDurationTimer?.cancel();
+    _callDurationTimer = null;
 
     try {
       _callSub?.cancel();
       _iceSub?.cancel();
       _localStream?.getTracks().forEach((track) {
         track.stop();
-        log('[CLEANUP] Track stopped: ${track.kind}');
       });
       _localStream?.dispose();
       _peerConnection?.close();
       _peerConnection = null;
       _localRenderer.dispose();
       _remoteRenderer.dispose();
-      log('[CLEANUP] ✅ All resources released');
     } catch (e) {
       log('[CLEANUP] ❌ Error during cleanup: $e');
     }
@@ -603,10 +501,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     }
   }
 
-  void _handleRemoteCandidate(
-    Map<String, dynamic> candidateData, {
-    required String direction,
-  }) {
+  void _handleRemoteCandidate(Map<String, dynamic> candidateData) {
     try {
       final candidateStr = candidateData['candidate'] as String? ?? '';
       final sdpMid = candidateData['sdpMid'] as String? ?? '';
@@ -614,25 +509,14 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       final dedupeKey = '$sdpMid|$sdpMLineIndex|$candidateStr';
 
       if (_remoteCandidateSet.contains(dedupeKey)) {
-        log('[ICE][dedupe] Ignoring duplicate ($direction)');
         return;
       }
       _remoteCandidateSet.add(dedupeKey);
 
       if (!_remoteDescSet) {
-        log(
-          '[ICE][buffer] Buffering ($direction) | '
-          'sdpMid=$sdpMid mLineIndex=$sdpMLineIndex len=${candidateStr.length} | '
-          'buffer size=${_pendingRemoteCandidates.length + 1}',
-        );
         _pendingRemoteCandidates.add(candidateData);
         return;
       }
-
-      log(
-        '[ICE][add] ($direction) | '
-        'sdpMid=$sdpMid mLineIndex=$sdpMLineIndex len=${candidateStr.length}',
-      );
       _peerConnection?.addCandidate(
         RTCIceCandidate(candidateStr, sdpMid, candidateData['sdpMLineIndex']),
       );
@@ -643,19 +527,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   void _flushPendingCandidates() {
     if (_pendingRemoteCandidates.isEmpty) {
-      log('[ICE][flush] Nothing to flush');
       return;
     }
-    log(
-      '[ICE][flush] Flushing ${_pendingRemoteCandidates.length} buffered candidates',
-    );
-    for (final cand in List<Map<String, dynamic>>.from(
-      _pendingRemoteCandidates,
-    )) {
+    for (final cand in _pendingRemoteCandidates) {
       try {
         final candidateStr = cand['candidate'] as String? ?? '';
         final sdpMid = cand['sdpMid'] as String? ?? '';
-        log('[ICE][flush] Adding sdpMid=$sdpMid len=${candidateStr.length}');
         _peerConnection?.addCandidate(
           RTCIceCandidate(candidateStr, sdpMid, cand['sdpMLineIndex']),
         );
@@ -664,7 +541,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       }
     }
     _pendingRemoteCandidates.clear();
-    log('[ICE][flush] ✅ Flush complete');
   }
 
   void _toggleMute() {
@@ -673,7 +549,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       if (audioTracks != null && audioTracks.isNotEmpty) {
         final enabled = !audioTracks[0].enabled;
         audioTracks[0].enabled = enabled;
-        log('[UI] Mute toggled → muted=${!enabled}');
         if (!mounted) return;
         ref.read(callProvider.notifier).isMuted = !enabled;
       }
@@ -686,7 +561,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     try {
       _isSpeaker = !_isSpeaker;
       await Helper.setSpeakerphoneOn(_isSpeaker);
-      log('[UI] Speaker toggled → speaker=$_isSpeaker');
       if (!mounted) return;
       ref.read(callProvider.notifier).isSpeaker = _isSpeaker;
     } catch (e) {
@@ -700,7 +574,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       if (videoTracks != null && videoTracks.isNotEmpty) {
         final enabled = !videoTracks[0].enabled;
         videoTracks[0].enabled = enabled;
-        log('[UI] Camera toggled → cameraOff=${!enabled}');
         if (!mounted) return;
         ref.read(callProvider.notifier).isCameraOff = !enabled;
       }
@@ -714,7 +587,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       final videoTracks = _localStream?.getVideoTracks();
       if (videoTracks != null && videoTracks.isNotEmpty) {
         Helper.switchCamera(videoTracks[0]);
-        log('[UI] Camera switched');
       }
     } catch (e) {
       _showError('Could not switch camera. Please try again.');
@@ -727,14 +599,25 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     }
   }
 
-  void _safePop() {
-    if (mounted && Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
+  // ─── Call Duration Timer helpers ───
+  void _startCallTimer() {
+    if (_callDurationTimer != null) return; // already running
+    _callDurationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        ref.read(callDurationProvider.notifier).state++;
+      }
+    });
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   @override
   void dispose() {
+    _callDurationTimer?.cancel();
     // Subscriptions and PC only — renderers disposed in _cleanupAndPop()
     _callSub?.cancel();
     _iceSub?.cancel();
@@ -761,6 +644,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
               callProvider.select((s) => s.isConnected),
             );
             final isLoading = ref.watch(loadingProvider);
+            final isOnline = ref.watch(
+              isOnlineProvider(
+                ChatService.generateChatId(_currentUserId, widget.calleeId),
+              ),
+            );
 
             return Stack(
               children: [
@@ -840,13 +728,48 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                         Text(
                           isConnected
                               ? 'Connected'
-                              : (widget.isCaller
+                              : (isOnline
+                                    ? 'Ringing...'
+                                    : widget.isCaller
                                     ? 'Calling...'
                                     : 'Connecting...'),
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.7),
                             fontSize: 16,
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // ── Call Duration Timer (audio call only) ──
+                if (!widget.isVideo && isConnected)
+                  Positioned(
+                    top: 220,
+                    left: 0,
+                    right: 0,
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        Icon(
+                          Icons.bar_chart_rounded,
+                          color: Colors.white.withOpacity(0.6),
+                          size: 36,
+                        ),
+                        const SizedBox(height: 8),
+                        Consumer(
+                          builder: (context, ref, child) {
+                            return Text(
+                              _formatDuration(ref.watch(callDurationProvider)),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w300,
+                                letterSpacing: 4,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),

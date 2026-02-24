@@ -8,9 +8,6 @@ import 'package:link_up/database/sqflite_helper.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/services/chat_service.dart';
 
-// Loading state provider
-final isLoadingStateProvider = StateProvider<bool>((ref) => true);
-
 final isLoadingChatScreenProvider = StateProvider<bool>((ref) => true);
 
 // Messages list provider
@@ -19,16 +16,20 @@ final messagesProvider = StateProvider.family<List<Message>, String>(
 );
 
 // Typing indicator provider
-final isTypingProvider = StateProvider<bool>((ref) => false);
+final isTypingProvider = StateProvider.family<bool, String>(
+  (ref, chatId) => false,
+);
 
 // Online status provider
-final isOnlineProvider = StateProvider<bool>((ref) => false);
+final isOnlineProvider = StateProvider.family<bool, String>(
+  (ref, chatId) => false,
+);
 
 // Current user ID provider
-final currentUserIdProvider = StateProvider<String?>((ref) => null);
+final currentUserIdProvider = StateProvider.autoDispose<String?>((ref) => null);
 
 // Chat ID provider
-final chatIdProvider = StateProvider<String?>((ref) => null);
+final chatIdProvider = StateProvider.autoDispose<String?>((ref) => null);
 
 final audioErrorProvider = StateProvider.family<bool, (String, String?)>(
   (ref, param) => false,
@@ -73,7 +74,9 @@ final toggleRecordingProvider = StateProvider<bool>((ref) => false);
 final recordingPathProvider = StateProvider<String?>((ref) => null);
 
 // Voice preview playback state
-final isPlayingPreviewProvider = StateProvider<bool>((ref) => false);
+final isPlayingPreviewProvider = StateProvider.autoDispose<bool>(
+  (ref) => false,
+);
 
 final positionProvider = StateProvider<Duration>((ref) => Duration.zero);
 

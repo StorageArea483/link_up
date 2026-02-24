@@ -1,11 +1,11 @@
 import 'dart:async';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/pages/call_screen.dart';
 import 'package:link_up/pages/incoming_call_screen.dart';
 import 'package:link_up/pages/landing_page.dart';
+import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/providers/meetings_caller_provider.dart';
 import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/providers/user_contacts_provider.dart';
@@ -37,7 +37,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
 
   void _initialize() {
     if (mounted) {
-      ref.read(navigationProvider.notifier).state = 'null';
+      ref.read(navigationProvider.notifier).state = null;
     }
   }
 
@@ -49,16 +49,23 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
       response,
     ) {
       if (!mounted) return;
+
+      final isOnline = ref.read(networkConnectivityProvider).value ?? true;
+      if (!isOnline) {
+        return;
+      }
       final payload =
           response.payload; // ringing call data extracted from appwrite
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => IncomingCallScreen(
-            callId: payload['\$id'] as String,
-            callerName: payload['callerName'] as String? ?? 'Unknown',
-            callerId: payload['callerId'] as String,
-            offer: payload['offer'] as String,
-            isVideo: payload['isVideo'] as bool? ?? true,
+          builder: (context) => CheckConnection(
+            child: IncomingCallScreen(
+              callId: payload['\$id'] as String,
+              callerName: payload['callerName'] as String? ?? 'Unknown',
+              callerId: payload['callerId'] as String,
+              offer: payload['offer'] as String,
+              isVideo: payload['isVideo'] as bool? ?? true,
+            ),
           ),
         ),
       );
@@ -189,6 +196,9 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                   Expanded(
                     child: Consumer(
                       builder: (context, ref, _) {
+                        final connectivityState = ref.watch(
+                          networkConnectivityProvider,
+                        );
                         final contactsAsyncValue = ref.watch(
                           userContactProvider,
                         );
@@ -246,10 +256,22 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                 child: SizedBox(
                                   height: 600,
                                   child: Center(
-                                    child: Text(
-                                      'No contacts match your search.',
-                                      style: AppTextStyles.subtitle,
-                                      textAlign: TextAlign.center,
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.search_off,
+                                          size: 100,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                        SizedBox(height: 16),
+                                        Text(
+                                          'No contacts match your search.',
+                                          style: AppTextStyles.subtitle,
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -352,17 +374,37 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                         _ActionCircleButton(
                                           icon: Icons.call_rounded,
                                           onPressed: () {
+                                            final isOnline =
+                                                connectivityState.value ??
+                                                false;
+
+                                            if (!isOnline) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'No internet connection',
+                                                  ),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                              return;
+                                            }
                                             Navigator.of(context).push(
                                               MaterialPageRoute(
                                                 builder: (context) =>
-                                                    CallScreen(
-                                                      calleeId: contact.uid,
-                                                      calleeName: contact.name,
-                                                      calleeProfilePicture:
-                                                          contact
-                                                              .profilePicture,
-                                                      isVideo: false,
-                                                      isCaller: true,
+                                                    CheckConnection(
+                                                      child: CallScreen(
+                                                        calleeId: contact.uid,
+                                                        calleeName:
+                                                            contact.name,
+                                                        calleeProfilePicture:
+                                                            contact
+                                                                .profilePicture,
+                                                        isVideo: false,
+                                                        isCaller: true,
+                                                      ),
                                                     ),
                                               ),
                                             );
@@ -372,17 +414,37 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                         _ActionCircleButton(
                                           icon: Icons.videocam_rounded,
                                           onPressed: () {
+                                            final isOnline =
+                                                connectivityState.value ??
+                                                false;
+
+                                            if (!isOnline) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'No internet connection',
+                                                  ),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                              return;
+                                            }
                                             Navigator.of(context).push(
                                               MaterialPageRoute(
                                                 builder: (context) =>
-                                                    CallScreen(
-                                                      calleeId: contact.uid,
-                                                      calleeName: contact.name,
-                                                      calleeProfilePicture:
-                                                          contact
-                                                              .profilePicture,
-                                                      isVideo: true,
-                                                      isCaller: true,
+                                                    CheckConnection(
+                                                      child: CallScreen(
+                                                        calleeId: contact.uid,
+                                                        calleeName:
+                                                            contact.name,
+                                                        calleeProfilePicture:
+                                                            contact
+                                                                .profilePicture,
+                                                        isVideo: true,
+                                                        isCaller: true,
+                                                      ),
                                                     ),
                                               ),
                                             );

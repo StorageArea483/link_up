@@ -56,8 +56,10 @@ class AppState {
   }
 }
 
-final callProvider = StateNotifierProvider<Notifier, AppState>(
+final callProvider = StateNotifierProvider.autoDispose<Notifier, AppState>(
   (ref) => Notifier(),
 );
 
 final loadingProvider = StateProvider.autoDispose<bool>((ref) => false);
+
+final callDurationProvider = StateProvider.autoDispose<int>((ref) => 0);

@@ -184,6 +184,25 @@ class CallService {
     }
   }
 
+  static Future<bool> isCallActive(String callId) async {
+    try {
+      final doc = await databases.getDocument(
+        databaseId: databaseId,
+        collectionId: callsCollectionId,
+        documentId: callId,
+      );
+      final status = doc.data['status'] as String?;
+      return status != 'ended';
+    } on AppwriteException catch (e) {
+      if (e.code == 404) {
+        return false;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   static Future<void> cleanupCall(String callId) async {
     try {
       // Delete ICE candidates for this call

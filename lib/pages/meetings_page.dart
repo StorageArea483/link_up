@@ -59,37 +59,6 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
     }
   }
 
-  void _subscribeToPresence(List<UserContacts> contacts) {
-    if (currentUserId == null) return;
-    for (final contact in contacts) {
-      // Cancel existing before creating new
-      _presenceSubscription[contact.uid]?.cancel();
-
-      _presenceSubscription[contact
-          .uid] = ChatService.subscribeToPresence(contact.uid, (response) {
-        if (!mounted) return;
-        try {
-          final isOnline = response.payload['online'] ?? false;
-          ref
-                  .read(
-                    isOnlineProvider(
-                      ChatService.generateChatId(currentUserId!, contact.uid),
-                    ).notifier,
-                  )
-                  .state =
-              isOnline;
-        } catch (e, stack) {
-          log(
-            'ERROR in _MeetingsPageState._subscribeToPresence callback: $e\nSTACK: $stack',
-            name: 'DEBUG_SUBSCRIPTION',
-            error: e,
-            stackTrace: stack,
-          );
-        }
-      });
-    }
-  }
-
   void _listenForIncomingCalls() {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
@@ -119,6 +88,37 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
         ),
       );
     });
+  }
+
+  void _subscribeToPresence(List<UserContacts> contacts) {
+    if (currentUserId == null) return;
+    for (final contact in contacts) {
+      // Cancel existing before creating new
+      _presenceSubscription[contact.uid]?.cancel();
+
+      _presenceSubscription[contact
+          .uid] = ChatService.subscribeToPresence(contact.uid, (response) {
+        if (!mounted) return;
+        try {
+          final isOnline = response.payload['online'] ?? false;
+          ref
+                  .read(
+                    isOnlineProvider(
+                      ChatService.generateChatId(currentUserId!, contact.uid),
+                    ).notifier,
+                  )
+                  .state =
+              isOnline;
+        } catch (e, stack) {
+          log(
+            'ERROR in _MeetingsPageState._subscribeToPresence callback: $e\nSTACK: $stack',
+            name: 'DEBUG_SUBSCRIPTION',
+            error: e,
+            stackTrace: stack,
+          );
+        }
+      });
+    }
   }
 
   @override

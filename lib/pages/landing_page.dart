@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:link_up/pages/incoming_call_screen.dart';
+import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/providers/loading_provider.dart';
 import 'package:link_up/providers/random_num_provider.dart';
+import 'package:link_up/services/call_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/add_new_contact/qr_code.dart';
 import 'package:link_up/widgets/add_new_contact/qr_scanner.dart';
@@ -24,6 +29,52 @@ class LandingPage extends ConsumerStatefulWidget {
 }
 
 class _LandingPageState extends ConsumerState<LandingPage> {
+  StreamSubscription? _incomingCallSub;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _listenForIncomingCalls();
+    });
+  }
+
+  void _listenForIncomingCalls() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    _incomingCallSub = CallService.subscribeToIncomingCalls(currentUser.uid, (
+      response,
+    ) {
+      if (!mounted) return;
+
+      final isOnline = ref.read(networkConnectivityProvider).value ?? true;
+      if (!isOnline) {
+        return;
+      }
+      final payload =
+          response.payload; // ringing call data extracted from appwrite
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => CheckConnection(
+            child: IncomingCallScreen(
+              callId: payload['\$id'] as String,
+              callerName: payload['callerName'] as String? ?? 'Unknown',
+              callerId: payload['callerId'] as String,
+              offer: payload['offer'] as String,
+              isVideo: payload['isVideo'] as bool? ?? true,
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _incomingCallSub?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final phoneAsync = ref.watch(userPhoneNumberProvider);

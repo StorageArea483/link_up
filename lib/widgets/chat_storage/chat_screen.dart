@@ -8,10 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/models/user_contacts.dart';
+import 'package:link_up/pages/incoming_call_screen.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/providers/navigation_provider.dart';
+import 'package:link_up/services/call_service.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/pages/user_chats.dart';
@@ -44,6 +46,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   StreamSubscription? messageSubscription;
   StreamSubscription? typingSubscription;
   StreamSubscription? presenceSubscription;
+  StreamSubscription? _incomingCallSub;
 
   String? _currentUserId;
   String? _chatId;
@@ -111,6 +114,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeChat();
+      _listenForIncomingCalls();
+    });
+  }
+
+  void _listenForIncomingCalls() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    _incomingCallSub = CallService.subscribeToIncomingCalls(currentUser.uid, (
+      response,
+    ) {
+      if (!mounted) return;
+
+      final isOnline = ref.read(networkConnectivityProvider).value ?? true;
+      if (!isOnline) {
+        return;
+      }
+      final payload =
+          response.payload; // ringing call data extracted from appwrite
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => CheckConnection(
+            child: IncomingCallScreen(
+              callId: payload['\$id'] as String,
+              callerName: payload['callerName'] as String? ?? 'Unknown',
+              callerId: payload['callerId'] as String,
+              offer: payload['offer'] as String,
+              isVideo: payload['isVideo'] as bool? ?? true,
+            ),
+          ),
+        ),
+      );
     });
   }
 
@@ -122,6 +157,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _isTearingDown = true;
 
     _messageController.dispose();
+    _incomingCallSub?.cancel();
     messageSubscription?.cancel();
     typingSubscription?.cancel();
     presenceSubscription?.cancel();

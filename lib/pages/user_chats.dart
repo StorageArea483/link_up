@@ -76,51 +76,16 @@ class _UserChatsState extends ConsumerState<UserChats>
   }
 
   void _handleAppDetached() {
-    log(
-      'LIFECYCLE _handleAppDetached triggered | mounted: $mounted | '
-      'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
-      'presenceSubscriptions count: ${_presenceSubscriptions.length} | '
-      'typingSubscriptions count: ${_typingSubscriptions.length}',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
-    log('App detached - cancelling subscriptions', name: 'UserChats');
-
-    log(
-      'SUBSCRIPTION cancel called for messageSubscription | '
-      'isPaused: ${messageSubscription?.isPaused} | '
-      'caller: _handleAppDetached',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
     messageSubscription?.cancel();
     messageSubscription = null;
   }
 
   void _handleAppPaused() {
-    log(
-      'LIFECYCLE _handleAppPaused triggered | mounted: $mounted | '
-      'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
-      'presenceSubscriptions count: ${_presenceSubscriptions.length} | '
-      'typingSubscriptions count: ${_typingSubscriptions.length}',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     if (!mounted) return;
-    log('App paused - pausing subscriptions', name: 'UserChats');
     _pauseAllSubscriptions();
   }
 
   void _handleAppResumed() async {
-    log(
-      'LIFECYCLE _handleAppResumed triggered | mounted: $mounted | '
-      'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
-      'presenceSubscriptions count: ${_presenceSubscriptions.length} | '
-      'typingSubscriptions count: ${_typingSubscriptions.length}',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
-    if (!mounted) return;
-    log('App resumed - restoring subscriptions', name: 'UserChats');
     if (!mounted) return;
     currentUserId = FirebaseAuth.instance.currentUser?.uid;
     if (currentUserId == null) return;
@@ -153,30 +118,12 @@ class _UserChatsState extends ConsumerState<UserChats>
   }
 
   void _pauseAllSubscriptions() {
-    log(
-      'SUBSCRIPTION pause called for messageSubscription | '
-      'isPaused: ${messageSubscription?.isPaused} | '
-      'caller: _pauseAllSubscriptions',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
     messageSubscription?.pause();
 
     for (final sub in _presenceSubscriptions.values) {
-      log(
-        'SUBSCRIPTION pause called for presenceSubscription | '
-        'isPaused: ${sub.isPaused} | '
-        'caller: _pauseAllSubscriptions',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       sub.pause();
     }
     for (final sub in _typingSubscriptions.values) {
-      log(
-        'SUBSCRIPTION pause called for typingSubscription | '
-        'isPaused: ${sub.isPaused} | '
-        'caller: _pauseAllSubscriptions',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       sub.pause();
     }
   }
@@ -185,33 +132,15 @@ class _UserChatsState extends ConsumerState<UserChats>
     if (messageSubscription == null) {
       _subscribeToMessages();
     } else if (messageSubscription!.isPaused) {
-      log(
-        'SUBSCRIPTION resume called for messageSubscription | '
-        'isPaused: ${messageSubscription?.isPaused} | '
-        'caller: _resumeAllSubscriptions',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       messageSubscription!.resume();
     }
     for (final sub in _presenceSubscriptions.values) {
       if (sub.isPaused) {
-        log(
-          'SUBSCRIPTION resume called for presenceSubscription | '
-          'isPaused: ${sub.isPaused} | '
-          'caller: _resumeAllSubscriptions',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
         sub.resume();
       }
     }
     for (final sub in _typingSubscriptions.values) {
       if (sub.isPaused) {
-        log(
-          'SUBSCRIPTION resume called for typingSubscription | '
-          'isPaused: ${sub.isPaused} | '
-          'caller: _resumeAllSubscriptions',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
         sub.resume();
       }
     }
@@ -241,34 +170,12 @@ class _UserChatsState extends ConsumerState<UserChats>
   }
 
   void _subscribeToMessages() {
-    log(
-      'SUBSCRIBING in _UserChatsState._subscribeToMessages | '
-      'channel: messages collection | '
-      'filter value: currentUserId=$currentUserId',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     try {
       if (!mounted) return;
       currentUserId = FirebaseAuth.instance.currentUser?.uid;
       if (currentUserId == null) return;
-
-      log(
-        'SUBSCRIPTION cancel called for messageSubscription | '
-        'isPaused: ${messageSubscription?.isPaused} | '
-        'caller: _subscribeToMessages',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       messageSubscription?.cancel();
-
       messageSubscription = ChatService.subscribeToRealtimeMessages((message) {
-        log(
-          'CALLBACK ENTERED in _UserChatsState._subscribeToMessages | '
-          'mounted: $mounted | '
-          'payload: ${message.payload}',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
-
         if (!mounted) return;
         try {
           final newMessage = Message.fromJson(message.payload);
@@ -314,33 +221,11 @@ class _UserChatsState extends ConsumerState<UserChats>
   }
 
   void _subscribeToPresence(String contactId) {
-    log(
-      'SUBSCRIBING in _UserChatsState._subscribeToPresence | '
-      'channel: presence collection | '
-      'filter value: $contactId',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     if (!mounted || currentUserId == null) return;
-
-    log(
-      'SUBSCRIPTION cancel called for presenceSubscription[$contactId] | '
-      'isPaused: ${_presenceSubscriptions[contactId]?.isPaused} | '
-      'caller: _subscribeToPresence',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
     _presenceSubscriptions[contactId]?.cancel();
-
     _presenceSubscriptions[contactId] = ChatService.subscribeToPresence(
       contactId,
       (response) {
-        log(
-          'CALLBACK ENTERED in _UserChatsState._subscribeToPresence | '
-          'mounted: $mounted | '
-          'payload: ${response.payload}',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
-
         if (!mounted) return;
         try {
           final isOnline = response.payload['online'] ?? false;
@@ -365,33 +250,12 @@ class _UserChatsState extends ConsumerState<UserChats>
   }
 
   void _subscribeToTyping(String chatId) {
-    log(
-      'SUBSCRIBING in _UserChatsState._subscribeToTyping | '
-      'channel: typing collection | '
-      'filter value: $chatId',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     if (!mounted || currentUserId == null) return;
-
-    log(
-      'SUBSCRIPTION cancel called for typingSubscription[$chatId] | '
-      'isPaused: ${_typingSubscriptions[chatId]?.isPaused} | '
-      'caller: _subscribeToTyping',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
     _typingSubscriptions[chatId]?.cancel();
 
     _typingSubscriptions[chatId] = ChatService.subscribeToTyping(chatId, (
       response,
     ) {
-      log(
-        'CALLBACK ENTERED in _UserChatsState._subscribeToTyping | '
-        'mounted: $mounted | '
-        'payload: ${response.payload}',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
-
       if (!mounted) return;
       try {
         if (response.payload['userId'] != currentUserId) {
@@ -408,8 +272,6 @@ class _UserChatsState extends ConsumerState<UserChats>
       }
     });
   }
-
-  // ─── Initialization ─────────────────────────────────────────────────────────
 
   Future<void> _initialize() async {
     if (!mounted) return;
@@ -455,14 +317,6 @@ class _UserChatsState extends ConsumerState<UserChats>
   Widget build(BuildContext context) {
     // Listen to network connectivity changes
     ref.listen<AsyncValue<bool>>(networkConnectivityProvider, (previous, next) {
-      log(
-        'LIFECYCLE networkConnectivityProvider listener triggered | mounted: $mounted | '
-        'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
-        'presenceSubscriptions count: ${_presenceSubscriptions.length} | '
-        'typingSubscriptions count: ${_typingSubscriptions.length}',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
-
       if (!mounted) return;
 
       next.whenData((isOnline) async {
@@ -485,11 +339,6 @@ class _UserChatsState extends ConsumerState<UserChats>
             );
           }
         } else {
-          log(
-            'SUBSCRIPTION pause called for all subscriptions | '
-            'caller: networkConnectivityProvider listener offline',
-            name: 'DEBUG_SUBSCRIPTION',
-          );
           _pauseAllSubscriptions();
         }
       });

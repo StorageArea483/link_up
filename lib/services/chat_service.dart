@@ -114,13 +114,6 @@ class ChatService {
     Function(RealtimeMessage) callback,
   ) {
     try {
-      log(
-        'SUBSCRIBING in ChatService.subscribeToMessages | '
-        'channel: databases.$databaseId.collections.$messagesCollectionId.documents | '
-        'filter value: $chatId',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
-
       return realtime
           .subscribe([
             'databases.$databaseId.collections.$messagesCollectionId.documents',
@@ -128,34 +121,9 @@ class ChatService {
           .stream
           .listen(
             (response) {
-              // ADD THIS FIRST — before any if/filter checks:
-              log(
-                'STREAM EVENT RECEIVED in ChatService.subscribeToMessages | '
-                'payload keys: ${response.payload.keys.toList()} | '
-                'raw payload: ${response.payload}',
-                name: 'DEBUG_SUBSCRIPTION',
-              );
-
               try {
                 if (response.payload['chatId'] == chatId) {
-                  log(
-                    'FILTER PASSED in ChatService.subscribeToMessages | chatId matched: $chatId',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
-
-                  log(
-                    'CALLBACK ENTERED in ChatService.subscribeToMessages | '
-                    'payload: ${response.payload}',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
                   callback(response);
-                } else {
-                  log(
-                    'FILTER FAILED in ChatService.subscribeToMessages | '
-                    'expected chatId: $chatId | '
-                    'got: ${response.payload['chatId']}',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
                 }
               } catch (e, stack) {
                 log(
@@ -191,13 +159,6 @@ class ChatService {
     Function(RealtimeMessage) callback,
   ) {
     try {
-      log(
-        'SUBSCRIBING in ChatService.subscribeToPresence | '
-        'channel: databases.$databaseId.collections.$presenceCollectionId.documents | '
-        'filter value: $userId',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
-
       return realtime
           .subscribe([
             'databases.$databaseId.collections.$presenceCollectionId.documents',
@@ -205,34 +166,9 @@ class ChatService {
           .stream
           .listen(
             (response) {
-              // ADD THIS FIRST — before any if/filter checks:
-              log(
-                'STREAM EVENT RECEIVED in ChatService.subscribeToPresence | '
-                'payload keys: ${response.payload.keys.toList()} | '
-                'raw payload: ${response.payload}',
-                name: 'DEBUG_SUBSCRIPTION',
-              );
-
               try {
                 if (response.payload['userId'] == userId) {
-                  log(
-                    'FILTER PASSED in ChatService.subscribeToPresence | userId matched: $userId',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
-
-                  log(
-                    'CALLBACK ENTERED in ChatService.subscribeToPresence | '
-                    'payload: ${response.payload}',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
                   callback(response);
-                } else {
-                  log(
-                    'FILTER FAILED in ChatService.subscribeToPresence | '
-                    'expected userId: $userId | '
-                    'got: ${response.payload['userId']}',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
                 }
               } catch (e, stack) {
                 log(
@@ -265,13 +201,6 @@ class ChatService {
 
   static subscribeToRealtimeMessages(Function(RealtimeMessage) callback) {
     try {
-      log(
-        'SUBSCRIBING in ChatService.subscribeToRealtimeMessages | '
-        'channel: databases.$databaseId.collections.$messagesCollectionId.documents | '
-        'filter value: status=sent',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
-
       // Subscribe to all document changes in the messages collection
       // Only listen for 'sent' status messages (delivered messages are handled locally)
       return realtime
@@ -281,36 +210,11 @@ class ChatService {
           .stream
           .listen(
             (response) {
-              // ADD THIS FIRST — before any if/filter checks:
-              log(
-                'STREAM EVENT RECEIVED in ChatService.subscribeToRealtimeMessages | '
-                'payload keys: ${response.payload.keys.toList()} | '
-                'raw payload: ${response.payload}',
-                name: 'DEBUG_SUBSCRIPTION',
-              );
-
               try {
                 // Only process messages with 'sent' status
                 // Delivered messages are deleted from Appwrite and stored locally
                 if (response.payload['status'] == 'sent') {
-                  log(
-                    'FILTER PASSED in ChatService.subscribeToRealtimeMessages | status matched: sent',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
-
-                  log(
-                    'CALLBACK ENTERED in ChatService.subscribeToRealtimeMessages | '
-                    'payload: ${response.payload}',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
                   callback(response);
-                } else {
-                  log(
-                    'FILTER FAILED in ChatService.subscribeToRealtimeMessages | '
-                    'expected status: sent | '
-                    'got: ${response.payload['status']}',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
                 }
               } catch (e, stack) {
                 log(
@@ -474,13 +378,6 @@ class ChatService {
 
   static subscribeToTyping(String chatId, Function(RealtimeMessage) callback) {
     try {
-      log(
-        'SUBSCRIBING in ChatService.subscribeToTyping | '
-        'channel: databases.$databaseId.collections.$typingCollectionId.documents | '
-        'filter value: $chatId',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
-
       return realtime
           .subscribe([
             'databases.$databaseId.collections.$typingCollectionId.documents',
@@ -488,34 +385,9 @@ class ChatService {
           .stream
           .listen(
             (response) {
-              // ADD THIS FIRST — before any if/filter checks:
-              log(
-                'STREAM EVENT RECEIVED in ChatService.subscribeToTyping | '
-                'payload keys: ${response.payload.keys.toList()} | '
-                'raw payload: ${response.payload}',
-                name: 'DEBUG_SUBSCRIPTION',
-              );
-
               try {
                 if (response.payload['chatId'] == chatId) {
-                  log(
-                    'FILTER PASSED in ChatService.subscribeToTyping | chatId matched: $chatId',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
-
-                  log(
-                    'CALLBACK ENTERED in ChatService.subscribeToTyping | '
-                    'payload: ${response.payload}',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
                   callback(response);
-                } else {
-                  log(
-                    'FILTER FAILED in ChatService.subscribeToTyping | '
-                    'expected chatId: $chatId | '
-                    'got: ${response.payload['chatId']}',
-                    name: 'DEBUG_SUBSCRIPTION',
-                  );
                 }
               } catch (e, stack) {
                 log(

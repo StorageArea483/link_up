@@ -169,42 +169,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _handleAppDetached() {
-    log(
-      'LIFECYCLE _handleAppDetached triggered | mounted: $mounted | '
-      'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
-      'presenceSubscriptions count: 1 | '
-      'typingSubscriptions count: 1',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     try {
       if (!mounted) return;
-
-      log('App detached - cancelling subscriptions', name: 'ChatScreen');
-
-      // App is about to be terminated, clean up subscriptions
-      log(
-        'SUBSCRIPTION cancel called for messageSubscription | '
-        'isPaused: ${messageSubscription?.isPaused} | '
-        'caller: _handleAppDetached',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       messageSubscription?.cancel();
-
-      log(
-        'SUBSCRIPTION cancel called for typingSubscription | '
-        'isPaused: ${typingSubscription?.isPaused} | '
-        'caller: _handleAppDetached',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       typingSubscription?.cancel();
-
-      log(
-        'SUBSCRIPTION cancel called for presenceSubscription | '
-        'isPaused: ${presenceSubscription?.isPaused} | '
-        'caller: _handleAppDetached',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       presenceSubscription?.cancel();
 
       // Set subscriptions to null so they can be re-established if needed
@@ -222,56 +190,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _handleAppResumed() async {
-    log(
-      'LIFECYCLE _handleAppResumed triggered | mounted: $mounted | '
-      'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
-      'presenceSubscriptions count: 1 | '
-      'typingSubscriptions count: 1',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     try {
       if (!mounted || _currentUserId == null || _chatId == null) return;
-
-      log(
-        'App resumed - resuming/re-establishing subscriptions',
-        name: 'ChatScreen',
-      );
-
       // Re-establish or resume each subscription
       if (messageSubscription == null) {
         _subscribeToMessages();
       } else if (messageSubscription!.isPaused) {
-        log(
-          'SUBSCRIPTION resume called for messageSubscription | '
-          'isPaused: ${messageSubscription?.isPaused} | '
-          'caller: _handleAppResumed',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
         messageSubscription!.resume();
       }
 
       if (typingSubscription == null) {
         _subscribeToTyping();
       } else if (typingSubscription!.isPaused) {
-        log(
-          'SUBSCRIPTION resume called for typingSubscription | '
-          'isPaused: ${typingSubscription?.isPaused} | '
-          'caller: _handleAppResumed',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
         typingSubscription!.resume();
       }
 
       if (presenceSubscription == null) {
         _subscribeToPresence();
       } else if (presenceSubscription!.isPaused) {
-        log(
-          'SUBSCRIPTION resume called for presenceSubscription | '
-          'isPaused: ${presenceSubscription?.isPaused} | '
-          'caller: _handleAppResumed',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
         presenceSubscription!.resume();
       }
 
@@ -307,46 +243,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _handleAppPaused() {
-    log(
-      'LIFECYCLE _handleAppPaused triggered | mounted: $mounted | '
-      'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
-      'presenceSubscriptions count: 1 | '
-      'typingSubscriptions count: 1',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     try {
       if (!mounted) return;
-
-      log(
-        'App paused - pausing subscriptions to save resources',
-        name: 'ChatScreen',
-      );
-
-      // Pause subscriptions to save battery and network resources
-      // They will be resumed when app comes back to foreground
-      log(
-        'SUBSCRIPTION pause called for messageSubscription | '
-        'isPaused: ${messageSubscription?.isPaused} | '
-        'caller: _handleAppPaused',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       messageSubscription?.pause();
-
-      log(
-        'SUBSCRIPTION pause called for typingSubscription | '
-        'isPaused: ${typingSubscription?.isPaused} | '
-        'caller: _handleAppPaused',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       typingSubscription?.pause();
-
-      log(
-        'SUBSCRIPTION pause called for presenceSubscription | '
-        'isPaused: ${presenceSubscription?.isPaused} | '
-        'caller: _handleAppPaused',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       presenceSubscription?.pause();
     } catch (e, stack) {
       log(
@@ -627,13 +527,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _subscribeToMessages() {
-    log(
-      'SUBSCRIBING in _ChatScreenState._subscribeToMessages | '
-      'channel: messages collection | '
-      'filter value: ${ref.read(chatIdProvider)}',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     if (!mounted) return;
 
     final chatId = ref.read(
@@ -642,23 +535,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     if (chatId == null) return;
 
     try {
-      // Cancel existing subscription if it exists
-      log(
-        'SUBSCRIPTION cancel called for messageSubscription | '
-        'isPaused: ${messageSubscription?.isPaused} | '
-        'caller: _subscribeToMessages',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       messageSubscription?.cancel();
 
       messageSubscription = ChatService.subscribeToMessages(chatId, (response) {
-        log(
-          'CALLBACK ENTERED in _ChatScreenState._subscribeToMessages | '
-          'mounted: $mounted | '
-          'payload: ${response.payload}',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
-
         if (_isTearingDown || !mounted) return;
         try {
           final newMessage = Message.fromJson(response.payload);
@@ -718,11 +597,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           );
         }
       });
-
-      log(
-        'Message subscription established for chatId: $chatId',
-        name: 'ChatScreen',
-      );
     } catch (e, stack) {
       log(
         'ERROR in _ChatScreenState._subscribeToMessages: $e\nSTACK: $stack',
@@ -1097,37 +971,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _subscribeToTyping() {
-    log(
-      'SUBSCRIBING in _ChatScreenState._subscribeToTyping | '
-      'channel: typing collection | '
-      'filter value: ${ref.read(chatIdProvider)}',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     try {
       if (!mounted) return;
 
       final chatId = ref.read(chatIdProvider);
       final currentUserId = ref.read(currentUserIdProvider);
       if (chatId == null) return;
-
-      // Cancel existing subscription if it exists
-      log(
-        'SUBSCRIPTION cancel called for typingSubscription | '
-        'isPaused: ${typingSubscription?.isPaused} | '
-        'caller: _subscribeToTyping',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       typingSubscription?.cancel();
 
       typingSubscription = ChatService.subscribeToTyping(chatId, (response) {
-        log(
-          'CALLBACK ENTERED in _ChatScreenState._subscribeToTyping | '
-          'mounted: $mounted | '
-          'payload: ${response.payload}',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
-
         if (!mounted) return;
         try {
           if (response.payload['userId'] != currentUserId) {
@@ -1144,11 +996,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           );
         }
       });
-
-      log(
-        'Typing subscription established for chatId: $chatId',
-        name: 'ChatScreen',
-      );
     } catch (e, stack) {
       log(
         'ERROR in _ChatScreenState._subscribeToTyping: $e\nSTACK: $stack',
@@ -1160,35 +1007,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _subscribeToPresence() {
-    log(
-      'SUBSCRIBING in _ChatScreenState._subscribeToPresence | '
-      'channel: presence collection | '
-      'filter value: ${widget.contact.uid}',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     try {
       if (!mounted) return;
-
-      // Cancel existing subscription if it exists
-      log(
-        'SUBSCRIPTION cancel called for presenceSubscription | '
-        'isPaused: ${presenceSubscription?.isPaused} | '
-        'caller: _subscribeToPresence',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       presenceSubscription?.cancel();
 
       presenceSubscription = ChatService.subscribeToPresence(widget.contact.uid, (
         response,
       ) {
-        log(
-          'CALLBACK ENTERED in _ChatScreenState._subscribeToPresence | '
-          'mounted: $mounted | '
-          'payload: ${response.payload}',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
-
         if (!mounted) return;
         try {
           final isOnline =
@@ -1229,11 +1054,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           );
         }
       });
-
-      log(
-        'Presence subscription established for userId: ${widget.contact.uid}',
-        name: 'ChatScreen',
-      );
     } catch (e, stack) {
       log(
         'ERROR in _ChatScreenState._subscribeToPresence: $e\nSTACK: $stack',
@@ -1488,14 +1308,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           previous,
           next,
         ) {
-          log(
-            'LIFECYCLE networkConnectivityProvider listener triggered | mounted: $mounted | '
-            'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
-            'presenceSubscriptions count: 1 | '
-            'typingSubscriptions count: 1',
-            name: 'DEBUG_SUBSCRIPTION',
-          );
-
           if (!mounted) return;
 
           // Only handle connectivity changes if both previous and next have values
@@ -1544,20 +1356,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (_currentUserId == null || !mounted) return;
 
       if (isOnline) {
-        log(
-          'Network reconnected - resuming/re-establishing subscriptions',
-          name: 'ChatScreen',
-        );
-
         // Only try to resume if subscriptions exist and are paused
         if (messageSubscription != null) {
           try {
-            log(
-              'SUBSCRIPTION resume called for messageSubscription | '
-              'isPaused: ${messageSubscription?.isPaused} | '
-              'caller: _handleConnectivityChange',
-              name: 'DEBUG_SUBSCRIPTION',
-            );
             messageSubscription?.resume();
           } catch (e, stack) {
             log(
@@ -1575,12 +1376,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
         if (typingSubscription != null) {
           try {
-            log(
-              'SUBSCRIPTION resume called for typingSubscription | '
-              'isPaused: ${typingSubscription?.isPaused} | '
-              'caller: _handleConnectivityChange',
-              name: 'DEBUG_SUBSCRIPTION',
-            );
             typingSubscription?.resume();
           } catch (e, stack) {
             log(
@@ -1598,12 +1393,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
         if (presenceSubscription != null) {
           try {
-            log(
-              'SUBSCRIPTION resume called for presenceSubscription | '
-              'isPaused: ${presenceSubscription?.isPaused} | '
-              'caller: _handleConnectivityChange',
-              name: 'DEBUG_SUBSCRIPTION',
-            );
             presenceSubscription?.resume();
           } catch (e, stack) {
             log(
@@ -1695,31 +1484,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           );
         }
       } else {
-        log('Network disconnected - pausing subscriptions', name: 'ChatScreen');
-
         // Going offline - pause subscriptions to save resources
-        log(
-          'SUBSCRIPTION pause called for messageSubscription | '
-          'isPaused: ${messageSubscription?.isPaused} | '
-          'caller: _handleConnectivityChange',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
         messageSubscription?.pause();
-
-        log(
-          'SUBSCRIPTION pause called for typingSubscription | '
-          'isPaused: ${typingSubscription?.isPaused} | '
-          'caller: _handleConnectivityChange',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
         typingSubscription?.pause();
-
-        log(
-          'SUBSCRIPTION pause called for presenceSubscription | '
-          'isPaused: ${presenceSubscription?.isPaused} | '
-          'caller: _handleConnectivityChange',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
         presenceSubscription?.pause();
 
         if (mounted) {

@@ -60,33 +60,13 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
   }
 
   void _subscribeToPresence(List<UserContacts> contacts) {
-    log(
-      'SUBSCRIBING in _MeetingsPageState._subscribeToPresence | '
-      'channel: presence collection | '
-      'filter value: multiple contacts (${contacts.length})',
-      name: 'DEBUG_SUBSCRIPTION',
-    );
-
     if (currentUserId == null) return;
     for (final contact in contacts) {
       // Cancel existing before creating new
-      log(
-        'SUBSCRIPTION cancel called for presenceSubscription[${contact.uid}] | '
-        'isPaused: ${_presenceSubscription[contact.uid]?.isPaused} | '
-        'caller: _subscribeToPresence',
-        name: 'DEBUG_SUBSCRIPTION',
-      );
       _presenceSubscription[contact.uid]?.cancel();
 
       _presenceSubscription[contact
           .uid] = ChatService.subscribeToPresence(contact.uid, (response) {
-        log(
-          'CALLBACK ENTERED in _MeetingsPageState._subscribeToPresence | '
-          'mounted: $mounted | '
-          'payload: ${response.payload}',
-          name: 'DEBUG_SUBSCRIPTION',
-        );
-
         if (!mounted) return;
         try {
           final isOnline = response.payload['online'] ?? false;

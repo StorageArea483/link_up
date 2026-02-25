@@ -29,10 +29,10 @@ packages:
     dependency: "direct main"
     description:
       name: appwrite
-      sha256: "58798a8973136ab8d8eb65f206b3fe99a32c0254a2c570efdda590810771098f"
+      sha256: "895017c9733f7372900b322766a15b979bcd59f8bc75f03721cd50c6b8c27633"
       url: "https://pub.dev"
     source: hosted
-    version: "21.3.0"
+    version: "21.4.0"
   args:
     dependency: transitive
     description:
@@ -900,10 +900,10 @@ packages:
     dependency: transitive
     description:
       name: package_info_plus
-      sha256: f69da0d3189a4b4ceaeb1a3defb0f329b3b352517f52bed4290f83d4f06bc08d
+      sha256: "16eee997588c60225bda0488b6dcfac69280a6b7a3cf02c741895dd370a02968"
       url: "https://pub.dev"
     source: hosted
-    version: "9.0.0"
+    version: "8.3.1"
   package_info_plus_platform_interface:
     dependency: transitive
     description:

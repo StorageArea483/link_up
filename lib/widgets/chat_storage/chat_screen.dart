@@ -169,26 +169,67 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _handleAppDetached() {
+    log(
+      'LIFECYCLE _handleAppDetached triggered | mounted: $mounted | '
+      'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
+      'presenceSubscriptions count: 1 | '
+      'typingSubscriptions count: 1',
+      name: 'DEBUG_SUBSCRIPTION',
+    );
+
     try {
       if (!mounted) return;
 
       log('App detached - cancelling subscriptions', name: 'ChatScreen');
 
       // App is about to be terminated, clean up subscriptions
+      log(
+        'SUBSCRIPTION cancel called for messageSubscription | '
+        'isPaused: ${messageSubscription?.isPaused} | '
+        'caller: _handleAppDetached',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
       messageSubscription?.cancel();
+
+      log(
+        'SUBSCRIPTION cancel called for typingSubscription | '
+        'isPaused: ${typingSubscription?.isPaused} | '
+        'caller: _handleAppDetached',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
       typingSubscription?.cancel();
+
+      log(
+        'SUBSCRIPTION cancel called for presenceSubscription | '
+        'isPaused: ${presenceSubscription?.isPaused} | '
+        'caller: _handleAppDetached',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
       presenceSubscription?.cancel();
 
       // Set subscriptions to null so they can be re-established if needed
       messageSubscription = null;
       typingSubscription = null;
       presenceSubscription = null;
-    } catch (e) {
-      // Silent cleanup failure - app is terminating
+    } catch (e, stack) {
+      log(
+        'ERROR in _ChatScreenState._handleAppDetached: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 
   void _handleAppResumed() async {
+    log(
+      'LIFECYCLE _handleAppResumed triggered | mounted: $mounted | '
+      'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
+      'presenceSubscriptions count: 1 | '
+      'typingSubscriptions count: 1',
+      name: 'DEBUG_SUBSCRIPTION',
+    );
+
     try {
       if (!mounted || _currentUserId == null || _chatId == null) return;
 
@@ -201,18 +242,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (messageSubscription == null) {
         _subscribeToMessages();
       } else if (messageSubscription!.isPaused) {
+        log(
+          'SUBSCRIPTION resume called for messageSubscription | '
+          'isPaused: ${messageSubscription?.isPaused} | '
+          'caller: _handleAppResumed',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
         messageSubscription!.resume();
       }
 
       if (typingSubscription == null) {
         _subscribeToTyping();
       } else if (typingSubscription!.isPaused) {
+        log(
+          'SUBSCRIPTION resume called for typingSubscription | '
+          'isPaused: ${typingSubscription?.isPaused} | '
+          'caller: _handleAppResumed',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
         typingSubscription!.resume();
       }
 
       if (presenceSubscription == null) {
         _subscribeToPresence();
       } else if (presenceSubscription!.isPaused) {
+        log(
+          'SUBSCRIPTION resume called for presenceSubscription | '
+          'isPaused: ${presenceSubscription?.isPaused} | '
+          'caller: _handleAppResumed',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
         presenceSubscription!.resume();
       }
 
@@ -227,7 +286,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
       // Check contact's current presence
       await _checkUserPresence();
-    } catch (e) {
+    } catch (e, stack) {
+      log(
+        'ERROR in _ChatScreenState._handleAppResumed: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -242,6 +307,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _handleAppPaused() {
+    log(
+      'LIFECYCLE _handleAppPaused triggered | mounted: $mounted | '
+      'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
+      'presenceSubscriptions count: 1 | '
+      'typingSubscriptions count: 1',
+      name: 'DEBUG_SUBSCRIPTION',
+    );
+
     try {
       if (!mounted) return;
 
@@ -252,11 +325,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
       // Pause subscriptions to save battery and network resources
       // They will be resumed when app comes back to foreground
+      log(
+        'SUBSCRIPTION pause called for messageSubscription | '
+        'isPaused: ${messageSubscription?.isPaused} | '
+        'caller: _handleAppPaused',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
       messageSubscription?.pause();
+
+      log(
+        'SUBSCRIPTION pause called for typingSubscription | '
+        'isPaused: ${typingSubscription?.isPaused} | '
+        'caller: _handleAppPaused',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
       typingSubscription?.pause();
+
+      log(
+        'SUBSCRIPTION pause called for presenceSubscription | '
+        'isPaused: ${presenceSubscription?.isPaused} | '
+        'caller: _handleAppPaused',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
       presenceSubscription?.pause();
-    } catch (e) {
-      // Silent failure for resource cleanup
+    } catch (e, stack) {
+      log(
+        'ERROR in _ChatScreenState._handleAppPaused: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 
@@ -352,7 +450,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
         // Process each updated message
         for (final updatedMessage in updatedMessages) {
-          final updatedMsg = Message.fromJson(updatedMessage.data);
+          final fullData = {'\$id': updatedMessage.$id, ...updatedMessage.data};
+          final updatedMsg = Message.fromJson(fullData);
 
           // Find and update the message in the current list
           final index = updatedMessagesList.indexWhere(
@@ -436,7 +535,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         if (isOnline) {
           final docs = await ChatService.getMessages(chatId);
           final sentMessages = docs.documents
-              .map((doc) => Message.fromJson(doc.data))
+              .map((doc) => Message.fromJson({'\$id': doc.$id, ...doc.data}))
               .toList();
 
           // Merge and update
@@ -528,6 +627,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _subscribeToMessages() {
+    log(
+      'SUBSCRIBING in _ChatScreenState._subscribeToMessages | '
+      'channel: messages collection | '
+      'filter value: ${ref.read(chatIdProvider)}',
+      name: 'DEBUG_SUBSCRIPTION',
+    );
+
     if (!mounted) return;
 
     final chatId = ref.read(
@@ -537,9 +643,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     try {
       // Cancel existing subscription if it exists
+      log(
+        'SUBSCRIPTION cancel called for messageSubscription | '
+        'isPaused: ${messageSubscription?.isPaused} | '
+        'caller: _subscribeToMessages',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
       messageSubscription?.cancel();
 
       messageSubscription = ChatService.subscribeToMessages(chatId, (response) {
+        log(
+          'CALLBACK ENTERED in _ChatScreenState._subscribeToMessages | '
+          'mounted: $mounted | '
+          'payload: ${response.payload}',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
+
         if (_isTearingDown || !mounted) return;
         try {
           final newMessage = Message.fromJson(response.payload);
@@ -576,8 +695,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               // Mark this specific message as delivered
               try {
                 _markSingleMessageAsDelivered(newMessage.id);
-              } catch (e) {
-                // Silent failure - message delivery status update is not critical for UI
+              } catch (e, stack) {
+                log(
+                  'ERROR in _ChatScreenState._subscribeToMessages markSingleMessageAsDelivered: $e\nSTACK: $stack',
+                  name: 'DEBUG_SUBSCRIPTION',
+                  error: e,
+                  stackTrace: stack,
+                );
               }
             }
 
@@ -585,8 +709,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               _handleDeliveredMessage(newMessage);
             }
           }
-        } catch (e) {
-          // Silent failure - message processing errors are handled gracefully
+        } catch (e, stack) {
+          log(
+            'ERROR in _ChatScreenState._subscribeToMessages callback: $e\nSTACK: $stack',
+            name: 'DEBUG_SUBSCRIPTION',
+            error: e,
+            stackTrace: stack,
+          );
         }
       });
 
@@ -594,7 +723,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         'Message subscription established for chatId: $chatId',
         name: 'ChatScreen',
       );
-    } catch (e) {
+    } catch (e, stack) {
+      log(
+        'ERROR in _ChatScreenState._subscribeToMessages: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -937,10 +1072,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (updatedMessage != null && mounted) {
         // Update the UI immediately
         if (!mounted) return;
+        final fullData = {'\$id': updatedMessage.$id, ...updatedMessage.data};
         final currentMessages = ref.read(messagesProvider(chatId));
         final updatedMessagesList = [...currentMessages];
 
-        final updatedMsg = Message.fromJson(updatedMessage.data);
+        final updatedMsg = Message.fromJson(fullData);
         final index = updatedMessagesList.indexWhere(
           (msg) => msg.id == updatedMsg.id,
         );
@@ -961,6 +1097,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _subscribeToTyping() {
+    log(
+      'SUBSCRIBING in _ChatScreenState._subscribeToTyping | '
+      'channel: typing collection | '
+      'filter value: ${ref.read(chatIdProvider)}',
+      name: 'DEBUG_SUBSCRIPTION',
+    );
+
     try {
       if (!mounted) return;
 
@@ -969,9 +1112,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (chatId == null) return;
 
       // Cancel existing subscription if it exists
+      log(
+        'SUBSCRIPTION cancel called for typingSubscription | '
+        'isPaused: ${typingSubscription?.isPaused} | '
+        'caller: _subscribeToTyping',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
       typingSubscription?.cancel();
 
       typingSubscription = ChatService.subscribeToTyping(chatId, (response) {
+        log(
+          'CALLBACK ENTERED in _ChatScreenState._subscribeToTyping | '
+          'mounted: $mounted | '
+          'payload: ${response.payload}',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
+
         if (!mounted) return;
         try {
           if (response.payload['userId'] != currentUserId) {
@@ -979,8 +1135,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ref.read(isTypingProvider(chatId).notifier).state =
                 response.payload['isTyping'] ?? false;
           }
-        } catch (e) {
-          // Silent failure - typing indicator errors are not critical
+        } catch (e, stack) {
+          log(
+            'ERROR in _ChatScreenState._subscribeToTyping callback: $e\nSTACK: $stack',
+            name: 'DEBUG_SUBSCRIPTION',
+            error: e,
+            stackTrace: stack,
+          );
         }
       });
 
@@ -988,21 +1149,46 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         'Typing subscription established for chatId: $chatId',
         name: 'ChatScreen',
       );
-    } catch (e) {
-      // Silent failure - typing subscription is not critical for core functionality
+    } catch (e, stack) {
+      log(
+        'ERROR in _ChatScreenState._subscribeToTyping: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 
   void _subscribeToPresence() {
+    log(
+      'SUBSCRIBING in _ChatScreenState._subscribeToPresence | '
+      'channel: presence collection | '
+      'filter value: ${widget.contact.uid}',
+      name: 'DEBUG_SUBSCRIPTION',
+    );
+
     try {
       if (!mounted) return;
 
       // Cancel existing subscription if it exists
+      log(
+        'SUBSCRIPTION cancel called for presenceSubscription | '
+        'isPaused: ${presenceSubscription?.isPaused} | '
+        'caller: _subscribeToPresence',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
       presenceSubscription?.cancel();
 
       presenceSubscription = ChatService.subscribeToPresence(widget.contact.uid, (
         response,
       ) {
+        log(
+          'CALLBACK ENTERED in _ChatScreenState._subscribeToPresence | '
+          'mounted: $mounted | '
+          'payload: ${response.payload}',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
+
         if (!mounted) return;
         try {
           final isOnline =
@@ -1025,12 +1211,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             // Contact just came online, mark their messages as delivered
             try {
               _markMessagesAsDeliveredAndUpdate(widget.contact.uid);
-            } catch (e) {
-              // Silent failure - message delivery status update is not critical
+            } catch (e, stack) {
+              log(
+                'ERROR in _ChatScreenState._subscribeToPresence markMessagesAsDeliveredAndUpdate: $e\nSTACK: $stack',
+                name: 'DEBUG_SUBSCRIPTION',
+                error: e,
+                stackTrace: stack,
+              );
             }
           }
-        } catch (e) {
-          // Silent failure - presence update errors are not critical
+        } catch (e, stack) {
+          log(
+            'ERROR in _ChatScreenState._subscribeToPresence callback: $e\nSTACK: $stack',
+            name: 'DEBUG_SUBSCRIPTION',
+            error: e,
+            stackTrace: stack,
+          );
         }
       });
 
@@ -1038,8 +1234,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         'Presence subscription established for userId: ${widget.contact.uid}',
         name: 'ChatScreen',
       );
-    } catch (e) {
-      // Silent failure - presence subscription is not critical for core functionality
+    } catch (e, stack) {
+      log(
+        'ERROR in _ChatScreenState._subscribeToPresence: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 
@@ -1125,8 +1326,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
       // Immediately add the message to the UI
       if (messageDoc != null && mounted) {
+        final fullData = {
+          '\$id': messageDoc.$id, // ← inject $id manually
+          ...messageDoc.data, // ← spread the rest of the fields
+        };
         final newMessage = Message.fromJson(
-          messageDoc.data,
+          fullData,
         ); // message with status sent gets added in appwrite db
         final currentMessages = ref.read(messagesProvider(chatId));
         if (!mounted) return;
@@ -1283,6 +1488,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           previous,
           next,
         ) {
+          log(
+            'LIFECYCLE networkConnectivityProvider listener triggered | mounted: $mounted | '
+            'messageSubscription isPaused: ${messageSubscription?.isPaused} | '
+            'presenceSubscriptions count: 1 | '
+            'typingSubscriptions count: 1',
+            name: 'DEBUG_SUBSCRIPTION',
+          );
+
           if (!mounted) return;
 
           // Only handle connectivity changes if both previous and next have values
@@ -1339,8 +1552,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         // Only try to resume if subscriptions exist and are paused
         if (messageSubscription != null) {
           try {
+            log(
+              'SUBSCRIPTION resume called for messageSubscription | '
+              'isPaused: ${messageSubscription?.isPaused} | '
+              'caller: _handleConnectivityChange',
+              name: 'DEBUG_SUBSCRIPTION',
+            );
             messageSubscription?.resume();
-          } catch (e) {
+          } catch (e, stack) {
+            log(
+              'ERROR in _ChatScreenState._handleConnectivityChange messageSubscription resume: $e\nSTACK: $stack',
+              name: 'DEBUG_SUBSCRIPTION',
+              error: e,
+              stackTrace: stack,
+            );
             // If resume fails, re-establish
             _subscribeToMessages();
           }
@@ -1350,8 +1575,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
         if (typingSubscription != null) {
           try {
+            log(
+              'SUBSCRIPTION resume called for typingSubscription | '
+              'isPaused: ${typingSubscription?.isPaused} | '
+              'caller: _handleConnectivityChange',
+              name: 'DEBUG_SUBSCRIPTION',
+            );
             typingSubscription?.resume();
-          } catch (e) {
+          } catch (e, stack) {
+            log(
+              'ERROR in _ChatScreenState._handleConnectivityChange typingSubscription resume: $e\nSTACK: $stack',
+              name: 'DEBUG_SUBSCRIPTION',
+              error: e,
+              stackTrace: stack,
+            );
             // If resume fails, re-establish
             _subscribeToTyping();
           }
@@ -1361,8 +1598,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
         if (presenceSubscription != null) {
           try {
+            log(
+              'SUBSCRIPTION resume called for presenceSubscription | '
+              'isPaused: ${presenceSubscription?.isPaused} | '
+              'caller: _handleConnectivityChange',
+              name: 'DEBUG_SUBSCRIPTION',
+            );
             presenceSubscription?.resume();
-          } catch (e) {
+          } catch (e, stack) {
+            log(
+              'ERROR in _ChatScreenState._handleConnectivityChange presenceSubscription resume: $e\nSTACK: $stack',
+              name: 'DEBUG_SUBSCRIPTION',
+              error: e,
+              stackTrace: stack,
+            );
             // If resume fails, re-establish
             _subscribeToPresence();
           }
@@ -1373,8 +1622,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         // Update presence to online and mark messages as delivered with UI update
         try {
           ChatService.updatePresence(userId: _currentUserId!, online: true);
-        } catch (e) {
-          // Silent failure - presence update is not critical
+        } catch (e, stack) {
+          log(
+            'ERROR in _ChatScreenState._handleConnectivityChange updatePresence: $e\nSTACK: $stack',
+            name: 'DEBUG_SUBSCRIPTION',
+            error: e,
+            stackTrace: stack,
+          );
         }
 
         if (!mounted) return;
@@ -1383,8 +1637,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         if (chatId != null) {
           try {
             _markMessagesAsDeliveredAndUpdate(_currentUserId!);
-          } catch (e) {
-            // Silent failure - message delivery status update is not critical
+          } catch (e, stack) {
+            log(
+              'ERROR in _ChatScreenState._handleConnectivityChange markMessagesAsDeliveredAndUpdate: $e\nSTACK: $stack',
+              name: 'DEBUG_SUBSCRIPTION',
+              error: e,
+              stackTrace: stack,
+            );
           }
         }
 
@@ -1402,8 +1661,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 ref.read(messagesProvider(chatId).notifier).state =
                     offlineMessages;
               }
-            } catch (e) {
-              // Silent failure - offline message loading is not critical
+            } catch (e, stack) {
+              log(
+                'ERROR in _ChatScreenState._handleConnectivityChange getDeliveredMessages: $e\nSTACK: $stack',
+                name: 'DEBUG_SUBSCRIPTION',
+                error: e,
+                stackTrace: stack,
+              );
             }
           }
         }
@@ -1411,21 +1675,51 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         // Then reload to get latest messages from server
         try {
           _reloadMessagesAfterReconnection();
-        } catch (e) {
-          // Silent failure - message reloading is not critical
+        } catch (e, stack) {
+          log(
+            'ERROR in _ChatScreenState._handleConnectivityChange reloadMessagesAfterReconnection: $e\nSTACK: $stack',
+            name: 'DEBUG_SUBSCRIPTION',
+            error: e,
+            stackTrace: stack,
+          );
         }
 
         try {
           _checkUserPresence();
-        } catch (e) {
-          // Silent failure - presence check is not critical
+        } catch (e, stack) {
+          log(
+            'ERROR in _ChatScreenState._handleConnectivityChange checkUserPresence: $e\nSTACK: $stack',
+            name: 'DEBUG_SUBSCRIPTION',
+            error: e,
+            stackTrace: stack,
+          );
         }
       } else {
         log('Network disconnected - pausing subscriptions', name: 'ChatScreen');
 
         // Going offline - pause subscriptions to save resources
+        log(
+          'SUBSCRIPTION pause called for messageSubscription | '
+          'isPaused: ${messageSubscription?.isPaused} | '
+          'caller: _handleConnectivityChange',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
         messageSubscription?.pause();
+
+        log(
+          'SUBSCRIPTION pause called for typingSubscription | '
+          'isPaused: ${typingSubscription?.isPaused} | '
+          'caller: _handleConnectivityChange',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
         typingSubscription?.pause();
+
+        log(
+          'SUBSCRIPTION pause called for presenceSubscription | '
+          'isPaused: ${presenceSubscription?.isPaused} | '
+          'caller: _handleConnectivityChange',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
         presenceSubscription?.pause();
 
         if (mounted) {
@@ -1433,7 +1727,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               false; // update the receiver online status to offline
         }
       }
-    } catch (e) {
+    } catch (e, stack) {
+      log(
+        'ERROR in _ChatScreenState._handleConnectivityChange: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1462,7 +1762,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       final docs = await ChatService.getMessages(chatId);
       if (mounted) {
         final newMessagesList = docs.documents
-            .map((doc) => Message.fromJson(doc.data))
+            .map((doc) => Message.fromJson({'\$id': doc.$id, ...doc.data}))
             .toList();
 
         // Step 2: Merge messages intelligently using helper method

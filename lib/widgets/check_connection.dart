@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:link_up/pages/google_signup.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
+import 'dart:developer';
 
 class CheckConnection extends StatefulWidget {
   final Widget child;
@@ -28,6 +29,12 @@ class _CheckConnectionState extends State<CheckConnection>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    log(
+      'LIFECYCLE didChangeAppLifecycleState triggered | mounted: $mounted | '
+      'state: $state',
+      name: 'DEBUG_SUBSCRIPTION',
+    );
+
     super.didChangeAppLifecycleState(state);
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;

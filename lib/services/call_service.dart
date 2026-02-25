@@ -203,6 +203,59 @@ class CallService {
     }
   }
 
+  static Future<void> clearStaleDataForUser(String userId) async {
+    try {
+      // Delete only calls where THIS user is caller or callee
+      final callerCalls = await databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: callsCollectionId,
+        queries: [Query.equal('callerId', userId), Query.limit(100)],
+      );
+      if (callerCalls.documents.isEmpty) return;
+      for (final doc in callerCalls.documents) {
+        await databases.deleteDocument(
+          databaseId: databaseId,
+          collectionId: callsCollectionId,
+          documentId: doc.$id,
+        );
+      }
+
+      final calleeCalls = await databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: callsCollectionId,
+        queries: [Query.equal('calleeId', userId), Query.limit(100)],
+      );
+      if (calleeCalls.documents.isEmpty) return;
+      for (final doc in calleeCalls.documents) {
+        await databases.deleteDocument(
+          databaseId: databaseId,
+          collectionId: callsCollectionId,
+          documentId: doc.$id,
+        );
+      }
+
+      // Delete only ICE candidates sent BY this user
+      final iceDocs = await databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: iceCandidatesCollectionId,
+        queries: [Query.equal('senderId', userId), Query.limit(100)],
+      );
+      if (iceDocs.documents.isEmpty) return;
+      for (final doc in iceDocs.documents) {
+        await databases.deleteDocument(
+          databaseId: databaseId,
+          collectionId: iceCandidatesCollectionId,
+          documentId: doc.$id,
+        );
+      }
+    } catch (e) {
+      log(
+        'Failed to clear stale data for user $userId: $e',
+        name: 'CallService',
+      );
+    }
+  }
+
   static Future<void> cleanupCall(String callId) async {
     try {
       // Delete ICE candidates for this call
@@ -211,6 +264,7 @@ class CallService {
         collectionId: iceCandidatesCollectionId,
         queries: [Query.equal('callId', callId), Query.limit(100)],
       );
+      if (iceDocs.documents.isEmpty) return;
       for (final doc in iceDocs.documents) {
         await databases.deleteDocument(
           databaseId: databaseId,

@@ -48,7 +48,8 @@ class ChatService {
       );
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in sendMessage: ${e.message}',
           name: 'ChatService',
@@ -72,7 +73,8 @@ class ChatService {
       return result;
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in getLastMessage: ${e.message}',
           name: 'ChatService',
@@ -96,7 +98,8 @@ class ChatService {
       return result;
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in getMessages: ${e.message}',
           name: 'ChatService',
@@ -111,6 +114,13 @@ class ChatService {
     Function(RealtimeMessage) callback,
   ) {
     try {
+      log(
+        'SUBSCRIBING in ChatService.subscribeToMessages | '
+        'channel: databases.$databaseId.collections.$messagesCollectionId.documents | '
+        'filter value: $chatId',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
+
       return realtime
           .subscribe([
             'databases.$databaseId.collections.$messagesCollectionId.documents',
@@ -118,23 +128,60 @@ class ChatService {
           .stream
           .listen(
             (response) {
+              // ADD THIS FIRST — before any if/filter checks:
+              log(
+                'STREAM EVENT RECEIVED in ChatService.subscribeToMessages | '
+                'payload keys: ${response.payload.keys.toList()} | '
+                'raw payload: ${response.payload}',
+                name: 'DEBUG_SUBSCRIPTION',
+              );
+
               try {
                 if (response.payload['chatId'] == chatId) {
+                  log(
+                    'FILTER PASSED in ChatService.subscribeToMessages | chatId matched: $chatId',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
+
+                  log(
+                    'CALLBACK ENTERED in ChatService.subscribeToMessages | '
+                    'payload: ${response.payload}',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
                   callback(response);
+                } else {
+                  log(
+                    'FILTER FAILED in ChatService.subscribeToMessages | '
+                    'expected chatId: $chatId | '
+                    'got: ${response.payload['chatId']}',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
                 }
-              } catch (e) {
-                // Silently handle payload parsing errors to prevent stream interruption
+              } catch (e, stack) {
+                log(
+                  'ERROR in ChatService.subscribeToMessages: $e\nSTACK: $stack',
+                  name: 'DEBUG_SUBSCRIPTION',
+                  error: e,
+                  stackTrace: stack,
+                );
               }
             },
             onError: (error) {
-              // Only log critical connection errors for debugging
-              log('Message subscription error: $error', name: 'ChatService');
+              log(
+                'STREAM ERROR in ChatService.subscribeToMessages: $error',
+                name: 'DEBUG_SUBSCRIPTION',
+                error: error,
+              );
             },
             cancelOnError: false,
           );
-    } catch (e) {
-      // Only log critical subscription setup errors for debugging
-      log('Failed to setup message subscription: $e', name: 'ChatService');
+    } catch (e, stack) {
+      log(
+        'ERROR in ChatService.subscribeToMessages: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
       return null;
     }
   }
@@ -144,6 +191,13 @@ class ChatService {
     Function(RealtimeMessage) callback,
   ) {
     try {
+      log(
+        'SUBSCRIBING in ChatService.subscribeToPresence | '
+        'channel: databases.$databaseId.collections.$presenceCollectionId.documents | '
+        'filter value: $userId',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
+
       return realtime
           .subscribe([
             'databases.$databaseId.collections.$presenceCollectionId.documents',
@@ -151,30 +205,73 @@ class ChatService {
           .stream
           .listen(
             (response) {
+              // ADD THIS FIRST — before any if/filter checks:
+              log(
+                'STREAM EVENT RECEIVED in ChatService.subscribeToPresence | '
+                'payload keys: ${response.payload.keys.toList()} | '
+                'raw payload: ${response.payload}',
+                name: 'DEBUG_SUBSCRIPTION',
+              );
+
               try {
                 if (response.payload['userId'] == userId) {
-                  // checking presence for reciever
+                  log(
+                    'FILTER PASSED in ChatService.subscribeToPresence | userId matched: $userId',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
+
+                  log(
+                    'CALLBACK ENTERED in ChatService.subscribeToPresence | '
+                    'payload: ${response.payload}',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
                   callback(response);
+                } else {
+                  log(
+                    'FILTER FAILED in ChatService.subscribeToPresence | '
+                    'expected userId: $userId | '
+                    'got: ${response.payload['userId']}',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
                 }
-              } catch (e) {
-                // Silently handle payload parsing errors to prevent stream interruption
+              } catch (e, stack) {
+                log(
+                  'ERROR in ChatService.subscribeToPresence: $e\nSTACK: $stack',
+                  name: 'DEBUG_SUBSCRIPTION',
+                  error: e,
+                  stackTrace: stack,
+                );
               }
             },
             onError: (error) {
-              // Only log critical connection errors for debugging
-              log('Presence subscription error: $error', name: 'ChatService');
+              log(
+                'STREAM ERROR in ChatService.subscribeToPresence: $error',
+                name: 'DEBUG_SUBSCRIPTION',
+                error: error,
+              );
             },
             cancelOnError: false,
           );
-    } catch (e) {
-      // Only log critical subscription setup errors for debugging
-      log('Failed to setup presence subscription: $e', name: 'ChatService');
+    } catch (e, stack) {
+      log(
+        'ERROR in ChatService.subscribeToPresence: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
       return null;
     }
   }
 
   static subscribeToRealtimeMessages(Function(RealtimeMessage) callback) {
     try {
+      log(
+        'SUBSCRIBING in ChatService.subscribeToRealtimeMessages | '
+        'channel: databases.$databaseId.collections.$messagesCollectionId.documents | '
+        'filter value: status=sent',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
+
       // Subscribe to all document changes in the messages collection
       // Only listen for 'sent' status messages (delivered messages are handled locally)
       return realtime
@@ -184,30 +281,61 @@ class ChatService {
           .stream
           .listen(
             (response) {
+              // ADD THIS FIRST — before any if/filter checks:
+              log(
+                'STREAM EVENT RECEIVED in ChatService.subscribeToRealtimeMessages | '
+                'payload keys: ${response.payload.keys.toList()} | '
+                'raw payload: ${response.payload}',
+                name: 'DEBUG_SUBSCRIPTION',
+              );
+
               try {
                 // Only process messages with 'sent' status
                 // Delivered messages are deleted from Appwrite and stored locally
                 if (response.payload['status'] == 'sent') {
+                  log(
+                    'FILTER PASSED in ChatService.subscribeToRealtimeMessages | status matched: sent',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
+
+                  log(
+                    'CALLBACK ENTERED in ChatService.subscribeToRealtimeMessages | '
+                    'payload: ${response.payload}',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
                   callback(response);
+                } else {
+                  log(
+                    'FILTER FAILED in ChatService.subscribeToRealtimeMessages | '
+                    'expected status: sent | '
+                    'got: ${response.payload['status']}',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
                 }
-              } catch (e) {
-                // Silently handle payload parsing errors to prevent stream interruption
+              } catch (e, stack) {
+                log(
+                  'ERROR in ChatService.subscribeToRealtimeMessages: $e\nSTACK: $stack',
+                  name: 'DEBUG_SUBSCRIPTION',
+                  error: e,
+                  stackTrace: stack,
+                );
               }
             },
             onError: (error) {
-              // Only log critical connection errors for debugging
               log(
-                'Realtime messages subscription error: $error',
-                name: 'ChatService',
+                'STREAM ERROR in ChatService.subscribeToRealtimeMessages: $error',
+                name: 'DEBUG_SUBSCRIPTION',
+                error: error,
               );
             },
             cancelOnError: false,
           );
-    } catch (e) {
-      // Only log critical subscription setup errors for debugging
+    } catch (e, stack) {
       log(
-        'Failed to setup realtime messages subscription: $e',
-        name: 'ChatService',
+        'ERROR in ChatService.subscribeToRealtimeMessages: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
       );
       return null;
     }
@@ -247,7 +375,8 @@ class ChatService {
       return updatedMessages;
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in markMessagesAsDelivered: ${e.message}',
           name: 'ChatService',
@@ -267,7 +396,8 @@ class ChatService {
       return true;
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in deleteMessageFromAppwrite: ${e.message}',
           name: 'ChatService',
@@ -290,7 +420,8 @@ class ChatService {
       );
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in updateMessageStatus: ${e.message}',
           name: 'ChatService',
@@ -330,7 +461,8 @@ class ChatService {
       return true;
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in setTyping: ${e.message}',
           name: 'ChatService',
@@ -342,6 +474,13 @@ class ChatService {
 
   static subscribeToTyping(String chatId, Function(RealtimeMessage) callback) {
     try {
+      log(
+        'SUBSCRIBING in ChatService.subscribeToTyping | '
+        'channel: databases.$databaseId.collections.$typingCollectionId.documents | '
+        'filter value: $chatId',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
+
       return realtime
           .subscribe([
             'databases.$databaseId.collections.$typingCollectionId.documents',
@@ -349,23 +488,60 @@ class ChatService {
           .stream
           .listen(
             (response) {
+              // ADD THIS FIRST — before any if/filter checks:
+              log(
+                'STREAM EVENT RECEIVED in ChatService.subscribeToTyping | '
+                'payload keys: ${response.payload.keys.toList()} | '
+                'raw payload: ${response.payload}',
+                name: 'DEBUG_SUBSCRIPTION',
+              );
+
               try {
                 if (response.payload['chatId'] == chatId) {
+                  log(
+                    'FILTER PASSED in ChatService.subscribeToTyping | chatId matched: $chatId',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
+
+                  log(
+                    'CALLBACK ENTERED in ChatService.subscribeToTyping | '
+                    'payload: ${response.payload}',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
                   callback(response);
+                } else {
+                  log(
+                    'FILTER FAILED in ChatService.subscribeToTyping | '
+                    'expected chatId: $chatId | '
+                    'got: ${response.payload['chatId']}',
+                    name: 'DEBUG_SUBSCRIPTION',
+                  );
                 }
-              } catch (e) {
-                // Silently handle payload parsing errors to prevent stream interruption
+              } catch (e, stack) {
+                log(
+                  'ERROR in ChatService.subscribeToTyping: $e\nSTACK: $stack',
+                  name: 'DEBUG_SUBSCRIPTION',
+                  error: e,
+                  stackTrace: stack,
+                );
               }
             },
             onError: (error) {
-              // Only log critical connection errors for debugging
-              log('Typing subscription error: $error', name: 'ChatService');
+              log(
+                'STREAM ERROR in ChatService.subscribeToTyping: $error',
+                name: 'DEBUG_SUBSCRIPTION',
+                error: error,
+              );
             },
             cancelOnError: false,
           );
-    } catch (e) {
-      // Only log critical subscription setup errors for debugging
-      log('Failed to setup typing subscription: $e', name: 'ChatService');
+    } catch (e, stack) {
+      log(
+        'ERROR in ChatService.subscribeToTyping: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
       return null;
     }
   }
@@ -401,7 +577,8 @@ class ChatService {
       return true;
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in updatePresence: ${e.message}',
           name: 'ChatService',
@@ -421,7 +598,8 @@ class ChatService {
       return docs.documents.isNotEmpty ? docs.documents.first : null;
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in getUserPresence: ${e.message}',
           name: 'ChatService',
@@ -451,7 +629,8 @@ class ChatService {
       return result.total;
     } catch (e) {
       // Only log critical server errors for debugging
-      if (e is AppwriteException && (e.code != null && e.code! >= 500)) {
+      if (e is AppwriteException &&
+          (e.code != null && (int.tryParse(e.code.toString()) ?? 0) >= 500)) {
         log(
           'Critical database error in getUnreadCount: ${e.message}',
           name: 'ChatService',

@@ -2,18 +2,22 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:link_up/models/user_contacts.dart';
 import 'package:link_up/pages/call_screen.dart';
 import 'package:link_up/pages/incoming_call_screen.dart';
 import 'package:link_up/pages/landing_page.dart';
+import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/providers/meetings_caller_provider.dart';
 import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/providers/user_contacts_provider.dart';
 import 'package:link_up/services/call_service.dart';
+import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/app_error_widget.dart';
 import 'package:link_up/widgets/bottom_navbar.dart';
 import 'package:link_up/widgets/check_connection.dart';
+import 'dart:developer';
 
 class MeetingsPage extends ConsumerStatefulWidget {
   const MeetingsPage({super.key});
@@ -25,6 +29,8 @@ class MeetingsPage extends ConsumerStatefulWidget {
 class _MeetingsPageState extends ConsumerState<MeetingsPage> {
   StreamSubscription? _incomingCallSub;
   final TextEditingController _searchController = TextEditingController();
+  final Map<String, StreamSubscription> _presenceSubscription = {};
+  String? currentUserId;
 
   @override
   void initState() {
@@ -35,9 +41,72 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
     });
   }
 
-  void _initialize() {
-    if (mounted) {
-      ref.read(navigationProvider.notifier).state = null;
+  void _initialize() async {
+    if (!mounted) return;
+    ref.read(navigationProvider.notifier).state = null;
+
+    // Always assign, never ??=
+    currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    try {
+      // Await the future so contacts are actually loaded before subscribing
+      final contacts = await ref.read(userContactProvider.future);
+      if (!mounted) return;
+      _subscribeToPresence(contacts);
+    } catch (e) {
+      // Continue if pre-loading fails
+    }
+  }
+
+  void _subscribeToPresence(List<UserContacts> contacts) {
+    log(
+      'SUBSCRIBING in _MeetingsPageState._subscribeToPresence | '
+      'channel: presence collection | '
+      'filter value: multiple contacts (${contacts.length})',
+      name: 'DEBUG_SUBSCRIPTION',
+    );
+
+    if (currentUserId == null) return;
+    for (final contact in contacts) {
+      // Cancel existing before creating new
+      log(
+        'SUBSCRIPTION cancel called for presenceSubscription[${contact.uid}] | '
+        'isPaused: ${_presenceSubscription[contact.uid]?.isPaused} | '
+        'caller: _subscribeToPresence',
+        name: 'DEBUG_SUBSCRIPTION',
+      );
+      _presenceSubscription[contact.uid]?.cancel();
+
+      _presenceSubscription[contact
+          .uid] = ChatService.subscribeToPresence(contact.uid, (response) {
+        log(
+          'CALLBACK ENTERED in _MeetingsPageState._subscribeToPresence | '
+          'mounted: $mounted | '
+          'payload: ${response.payload}',
+          name: 'DEBUG_SUBSCRIPTION',
+        );
+
+        if (!mounted) return;
+        try {
+          final isOnline = response.payload['online'] ?? false;
+          ref
+                  .read(
+                    isOnlineProvider(
+                      ChatService.generateChatId(currentUserId!, contact.uid),
+                    ).notifier,
+                  )
+                  .state =
+              isOnline;
+        } catch (e, stack) {
+          log(
+            'ERROR in _MeetingsPageState._subscribeToPresence callback: $e\nSTACK: $stack',
+            name: 'DEBUG_SUBSCRIPTION',
+            error: e,
+            stackTrace: stack,
+          );
+        }
+      });
     }
   }
 
@@ -75,6 +144,9 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
   @override
   void dispose() {
     _incomingCallSub?.cancel();
+    for (final sub in _presenceSubscription.values) {
+      sub.cancel();
+    }
     _searchController.dispose();
     super.dispose();
   }
@@ -196,9 +268,6 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                   Expanded(
                     child: Consumer(
                       builder: (context, ref, _) {
-                        final connectivityState = ref.watch(
-                          networkConnectivityProvider,
-                        );
                         final contactsAsyncValue = ref.watch(
                           userContactProvider,
                         );
@@ -211,7 +280,6 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                           skipLoadingOnReload: false,
                           data: (contacts) {
                             var filteredContacts = contacts;
-
                             if (contacts.isEmpty && searchValue.isEmpty) {
                               return const SingleChildScrollView(
                                 physics: AlwaysScrollableScrollPhysics(),
@@ -291,7 +359,12 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                 final hasProfilePicture = contact.profilePicture
                                     .trim()
                                     .isNotEmpty;
-
+                                // Read synchronously from Firebase — guaranteed non-null inside CheckConnection
+                                final userId =
+                                    FirebaseAuth.instance.currentUser?.uid;
+                                if (userId == null) {
+                                  return const SizedBox.shrink();
+                                }
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 12),
                                   decoration: BoxDecoration(
@@ -374,23 +447,14 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                         _ActionCircleButton(
                                           icon: Icons.call_rounded,
                                           onPressed: () {
-                                            final isOnline =
-                                                connectivityState.value ??
-                                                false;
-
-                                            if (!isOnline) {
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'No internet connection',
-                                                  ),
-                                                  backgroundColor: Colors.red,
+                                            final isOnline = ref.watch(
+                                              isOnlineProvider(
+                                                ChatService.generateChatId(
+                                                  userId,
+                                                  contact.uid,
                                                 ),
-                                              );
-                                              return;
-                                            }
+                                              ),
+                                            );
                                             Navigator.of(context).push(
                                               MaterialPageRoute(
                                                 builder: (context) =>
@@ -404,6 +468,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                                                 .profilePicture,
                                                         isVideo: false,
                                                         isCaller: true,
+                                                        isOnline: isOnline,
                                                       ),
                                                     ),
                                               ),
@@ -414,23 +479,14 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                         _ActionCircleButton(
                                           icon: Icons.videocam_rounded,
                                           onPressed: () {
-                                            final isOnline =
-                                                connectivityState.value ??
-                                                false;
-
-                                            if (!isOnline) {
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'No internet connection',
-                                                  ),
-                                                  backgroundColor: Colors.red,
+                                            final isOnline = ref.watch(
+                                              isOnlineProvider(
+                                                ChatService.generateChatId(
+                                                  userId,
+                                                  contact.uid,
                                                 ),
-                                              );
-                                              return;
-                                            }
+                                              ),
+                                            );
                                             Navigator.of(context).push(
                                               MaterialPageRoute(
                                                 builder: (context) =>
@@ -444,6 +500,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                                                 .profilePicture,
                                                         isVideo: true,
                                                         isCaller: true,
+                                                        isOnline: isOnline,
                                                       ),
                                                     ),
                                               ),

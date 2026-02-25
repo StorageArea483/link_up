@@ -7,10 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:link_up/providers/call_providers.dart';
-import 'package:link_up/providers/chat_providers.dart';
 import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/services/call_service.dart';
-import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 
 class CallScreen extends ConsumerStatefulWidget {
@@ -21,6 +19,7 @@ class CallScreen extends ConsumerStatefulWidget {
   final bool isCaller;
   final String? callId;
   final String? remoteOffer;
+  final bool? isOnline;
 
   const CallScreen({
     super.key,
@@ -31,6 +30,7 @@ class CallScreen extends ConsumerStatefulWidget {
     required this.isCaller,
     this.callId,
     this.remoteOffer,
+    this.isOnline,
   });
 
   @override
@@ -178,6 +178,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       return;
     }
 
+    await CallService.clearStaleDataForUser(_currentUserId);
+    if (!mounted) return;
     // 2. Get local media
     try {
       if (!mounted) return;
@@ -644,12 +646,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
               callProvider.select((s) => s.isConnected),
             );
             final isLoading = ref.watch(loadingProvider);
-            final isOnline = ref.watch(
-              isOnlineProvider(
-                ChatService.generateChatId(_currentUserId, widget.calleeId),
-              ),
-            );
-
             return Stack(
               children: [
                 // ── Remote Video (full screen) ──
@@ -728,7 +724,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                         Text(
                           isConnected
                               ? 'Connected'
-                              : (isOnline
+                              : (widget.isOnline == true
                                     ? 'Ringing...'
                                     : widget.isCaller
                                     ? 'Calling...'

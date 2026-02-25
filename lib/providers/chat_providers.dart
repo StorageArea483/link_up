@@ -26,10 +26,10 @@ final isOnlineProvider = StateProvider.family<bool, String>(
 );
 
 // Current user ID provider
-final currentUserIdProvider = StateProvider.autoDispose<String?>((ref) => null);
+final currentUserIdProvider = StateProvider<String?>((ref) => null);
 
 // Chat ID provider
-final chatIdProvider = StateProvider.autoDispose<String?>((ref) => null);
+final chatIdProvider = StateProvider<String?>((ref) => null);
 
 final audioErrorProvider = StateProvider.family<bool, (String, String?)>(
   (ref, param) => false,

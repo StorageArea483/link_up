@@ -26,16 +26,15 @@ class UserChats extends ConsumerStatefulWidget {
 class _UserChatsState extends ConsumerState<UserChats>
     with WidgetsBindingObserver {
   StreamSubscription? messageSubscription;
+  final Map<String, StreamSubscription> _presenceSubscriptions = {};
+  final Map<String, StreamSubscription> _typingSubscriptions = {};
 
   String? currentUserId;
 
   @override
   void initState() {
     super.initState();
-
-    // Add lifecycle observer
     WidgetsBinding.instance.addObserver(this);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initialize();
     });
@@ -43,17 +42,22 @@ class _UserChatsState extends ConsumerState<UserChats>
 
   @override
   void dispose() {
-    // Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
-
     messageSubscription?.cancel();
+    for (final sub in _presenceSubscriptions.values) {
+      sub.cancel();
+    }
+    for (final sub in _typingSubscriptions.values) {
+      sub.cancel();
+    }
+    _presenceSubscriptions.clear();
+    _typingSubscriptions.clear();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-
     if (!mounted) return;
 
     switch (state) {
@@ -72,65 +76,37 @@ class _UserChatsState extends ConsumerState<UserChats>
   }
 
   void _handleAppDetached() {
-    try {
-      if (!mounted) return;
+    log('App detached - cancelling subscriptions', name: 'UserChats');
+    messageSubscription?.cancel();
+    messageSubscription = null;
+  }
 
-      log('App detached - cancelling subscriptions', name: 'UserChats');
-      // App is about to be terminated, clean up subscriptions
-      messageSubscription?.cancel();
-      // Set subscriptions to null so they can be re-established if needed
-      messageSubscription = null;
-    } catch (e) {
-      // Silent cleanup failure - app is terminating
-    }
+  void _handleAppPaused() {
+    if (!mounted) return;
+    log('App paused - pausing subscriptions', name: 'UserChats');
+    _pauseAllSubscriptions();
   }
 
   void _handleAppResumed() async {
+    if (!mounted) return;
+    log('App resumed - restoring subscriptions', name: 'UserChats');
+    if (!mounted) return;
+    currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) return;
+    _resumeAllSubscriptions();
+
     try {
+      ref.invalidate(userContactProvider);
+      final contacts = await ref.read(userContactProvider.future);
       if (!mounted) return;
-      // Re-establish or resume subscription
-      log('App resumed - adding subscriptions', name: 'UserChats');
-      if (messageSubscription == null) {
-        _subscribeToMessages();
-      } else if (messageSubscription!.isPaused) {
-        messageSubscription!.resume();
-      }
-
-      // Invalidate and refresh all contact-related providers
-      if (mounted) {
-        ref.invalidate(userContactProvider);
-
-        currentUserId = FirebaseAuth.instance.currentUser?.uid;
-        if (currentUserId != null && mounted) {
-          try {
-            final contacts = await ref.read(userContactProvider.future);
-            if (!mounted) return;
-
-            for (final contact in contacts) {
-              if (!mounted) return;
-              ref.invalidate(lastMessageProvider(contact.uid));
-              ref.invalidate(unreadCountProvider(contact.uid));
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Unable to refresh chat data. Please restart the app.',
-                  ),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          }
-        }
-      }
+      _invalidateContactProviders(contacts);
+      _resubscribeContactStreams(contacts);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Unable to restore chat connections. Please restart the app.',
+              'Unable to refresh chat data. Please restart the app.',
             ),
             backgroundColor: Colors.red,
           ),
@@ -139,54 +115,78 @@ class _UserChatsState extends ConsumerState<UserChats>
     }
   }
 
-  void _handleAppPaused() {
-    try {
+  void _pauseAllSubscriptions() {
+    messageSubscription?.pause();
+    for (final sub in _presenceSubscriptions.values) {
+      sub.pause();
+    }
+    for (final sub in _typingSubscriptions.values) {
+      sub.pause();
+    }
+  }
+
+  void _resumeAllSubscriptions() {
+    if (messageSubscription == null) {
+      _subscribeToMessages();
+    } else if (messageSubscription!.isPaused) {
+      messageSubscription!.resume();
+    }
+    for (final sub in _presenceSubscriptions.values) {
+      if (sub.isPaused) sub.resume();
+    }
+    for (final sub in _typingSubscriptions.values) {
+      if (sub.isPaused) sub.resume();
+    }
+  }
+
+  /// Invalidates last message and unread count providers for all contacts
+  /// to force a fresh data fetch.
+  void _invalidateContactProviders(List<dynamic> contacts) {
+    for (final contact in contacts) {
       if (!mounted) return;
-      log(
-        'App paused - pausing subscriptions to save resources',
-        name: 'UserChats',
+      ref.invalidate(lastMessageProvider(contact.uid));
+      ref.invalidate(unreadCountProvider(contact.uid));
+    }
+  }
+
+  /// Re-subscribes to presence and typing streams for all contacts.
+  /// Call this after resuming, reconnecting, or initializing.
+  void _resubscribeContactStreams(List<dynamic> contacts) {
+    if (currentUserId == null) return;
+    for (final contact in contacts) {
+      if (!mounted) return;
+      _subscribeToPresence(contact.uid);
+      _subscribeToTyping(
+        ChatService.generateChatId(currentUserId!, contact.uid),
       );
-      // Pause subscriptions to save battery and network resources
-      // They will be resumed when app comes back to foreground
-      messageSubscription?.pause();
-    } catch (e) {
-      // Silent failure for resource cleanup
     }
   }
 
   void _subscribeToMessages() {
     try {
+      if (!mounted) return;
       currentUserId = FirebaseAuth.instance.currentUser?.uid;
       if (currentUserId == null) return;
 
-      // Cancel existing subscription if it exists
       messageSubscription?.cancel();
 
-      // Subscribe to all messages with status 'sent'
       messageSubscription = ChatService.subscribeToRealtimeMessages((message) {
         if (!mounted) return;
-
         try {
           final newMessage = Message.fromJson(message.payload);
 
-          // Check if this message is relevant to the current user
-          // (either sent by them or sent to them)
           if (newMessage.senderId == currentUserId ||
               newMessage.receiverId == currentUserId) {
-            // Determine the contact (the OTHER person in this conversation)
             final contactId = newMessage.senderId == currentUserId
-                ? newMessage
-                      .receiverId // If I sent it, the contact is the receiver
-                : newMessage
-                      .senderId; // If I received it, the contact is the sender
+                ? newMessage.receiverId
+                : newMessage.senderId;
 
-            // Invalidate providers for this contact to trigger UI refresh
             if (!mounted) return;
             ref.invalidate(lastMessageProvider(contactId));
             ref.invalidate(unreadCountProvider(contactId));
           }
         } catch (e) {
-          // Handle parsing errors silently - these are expected for malformed messages
+          // Silent - expected for malformed messages
         }
       });
     } catch (e) {
@@ -204,79 +204,116 @@ class _UserChatsState extends ConsumerState<UserChats>
     }
   }
 
-  Future<void> _initialize() async {
-    if (mounted) {
-      ref.read(navigationProvider.notifier).state = null;
-      ref.invalidate(userContactProvider);
-    }
-    if (messageSubscription == null) {
-      _subscribeToMessages();
-    } else if (messageSubscription!.isPaused) {
-      messageSubscription!.resume();
-    }
+  void _subscribeToPresence(String contactId) {
+    if (!mounted || currentUserId == null) return;
 
-    // Check initial network connectivity
+    _presenceSubscriptions[contactId]?.cancel();
+
+    _presenceSubscriptions[contactId] = ChatService.subscribeToPresence(
+      contactId,
+      (response) {
+        if (!mounted) return;
+        try {
+          final isOnline = response.payload['online'] ?? false;
+          ref
+                  .read(
+                    isOnlineProvider(
+                      ChatService.generateChatId(currentUserId!, contactId),
+                    ).notifier,
+                  )
+                  .state =
+              isOnline;
+        } catch (e) {
+          // Silent failure
+        }
+      },
+    );
+  }
+
+  void _subscribeToTyping(String chatId) {
+    if (!mounted || currentUserId == null) return;
+
+    _typingSubscriptions[chatId]?.cancel();
+
+    _typingSubscriptions[chatId] = ChatService.subscribeToTyping(chatId, (
+      response,
+    ) {
+      if (!mounted) return;
+      try {
+        if (response.payload['userId'] != currentUserId) {
+          ref.read(isTypingProvider(chatId).notifier).state =
+              response.payload['isTyping'] ?? false;
+        }
+      } catch (e) {
+        // Silent failure - typing indicator errors are not critical
+      }
+    });
+  }
+
+  // ─── Initialization ─────────────────────────────────────────────────────────
+
+  Future<void> _initialize() async {
+    if (!mounted) return;
+
+    ref.read(navigationProvider.notifier).state = null;
+    currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    _subscribeToMessages();
+
+    // Check connectivity before loading contacts
     try {
       final isOnline = await ref.read(networkConnectivityProvider.future);
       if (!mounted) return;
       if (!isOnline) {
-        messageSubscription?.pause();
-      } else {
-        messageSubscription?.resume();
+        _pauseAllSubscriptions();
+        return;
       }
     } catch (e) {
-      // Continue initialization even if connectivity check fails
+      // Continue even if connectivity check fails
     }
 
-    // Pre-warm the providers and invalidate per-contact providers for fresh data
-    currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUserId != null && mounted) {
-      try {
-        // This will trigger the providers to start loading data
-        final contacts = await ref.read(userContactProvider.future);
+    // Load contacts, pre-warm providers and subscribe to streams
+    try {
+      ref.invalidate(userContactProvider);
+      final contacts = await ref.read(userContactProvider.future);
+      if (!mounted) return;
+
+      for (final contact in contacts) {
         if (!mounted) return;
-        for (final contact in contacts) {
-          // Invalidate to clear stale data, then read to pre-load fresh data
-          if (!mounted) return;
-          ref.invalidate(lastMessageProvider(contact.uid));
-          ref.invalidate(unreadCountProvider(contact.uid));
-          ref.read(lastMessageProvider(contact.uid));
-          ref.read(unreadCountProvider(contact.uid));
-        }
-      } catch (e) {
-        // Continue even if pre-loading fails - data will load on demand
+        ref.invalidate(lastMessageProvider(contact.uid));
+        ref.invalidate(unreadCountProvider(contact.uid));
+        // Pre-load data
+        ref.read(lastMessageProvider(contact.uid));
+        ref.read(unreadCountProvider(contact.uid));
       }
+
+      _resubscribeContactStreams(contacts);
+    } catch (e) {
+      // Continue even if pre-loading fails - data will load on demand
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Listen to network connectivity changes - this is the correct place for ref.listen
+    // Listen to network connectivity changes
     ref.listen<AsyncValue<bool>>(networkConnectivityProvider, (previous, next) {
       if (!mounted) return;
 
-      next.whenData((isOnline) {
+      next.whenData((isOnline) async {
         if (isOnline) {
-          // Re-establish subscription (it will cancel existing one first)
+          currentUserId = FirebaseAuth.instance.currentUser?.uid;
           _subscribeToMessages();
 
-          // Refresh all providers when coming back online
-          if (!mounted) return;
-          ref.invalidate(userContactProvider);
-
-          // Also refresh all contact providers to ensure fresh data
-          currentUserId = FirebaseAuth.instance.currentUser?.uid;
-          if (currentUserId != null && mounted) {
-            ref.read(userContactProvider.future).then((contacts) {
-              for (final contact in contacts) {
-                if (!mounted) return;
-                ref.invalidate(lastMessageProvider(contact.uid));
-                ref.invalidate(unreadCountProvider(contact.uid));
-              }
-            });
+          try {
+            ref.invalidate(userContactProvider);
+            final contacts = await ref.read(userContactProvider.future);
+            if (!mounted) return;
+            _invalidateContactProviders(contacts);
+            _resubscribeContactStreams(contacts);
+          } catch (e) {
+            // Silent - will retry on next reconnect
           }
         } else {
-          messageSubscription?.pause();
+          _pauseAllSubscriptions();
         }
       });
     });
@@ -349,6 +386,7 @@ class _UserChatsState extends ConsumerState<UserChats>
                           ),
                         );
                       }
+
                       return ListView.builder(
                         padding: EdgeInsets.fromLTRB(
                           horizontalPadding,
@@ -377,9 +415,22 @@ class _UserChatsState extends ConsumerState<UserChats>
                                   );
                                   final int unreadCount =
                                       unreadCountAsync.value ?? 0;
-                                  if (currentUserId == null) {
+
+                                  // Firebase Auth is synchronous — user is guaranteed logged in
+                                  // here because CheckConnection wraps this page
+                                  final userId =
+                                      FirebaseAuth.instance.currentUser?.uid;
+                                  if (userId == null) {
                                     return const SizedBox.shrink();
                                   }
+
+                                  final chatId = ChatService.generateChatId(
+                                    userId,
+                                    contact.uid,
+                                  );
+                                  final isOnline = ref.watch(
+                                    isOnlineProvider(chatId),
+                                  );
 
                                   return Stack(
                                     clipBehavior: Clip.none,
@@ -395,14 +446,13 @@ class _UserChatsState extends ConsumerState<UserChats>
                                             height: 64,
                                             fit: BoxFit.cover,
                                             errorBuilder:
-                                                (context, error, stackTrace) {
-                                                  return const Icon(
-                                                    Icons.person_2_outlined,
-                                                    color:
-                                                        AppColors.primaryBlue,
-                                                    size: 32,
-                                                  );
-                                                },
+                                                (context, error, stackTrace) =>
+                                                    const Icon(
+                                                      Icons.person_2_outlined,
+                                                      color:
+                                                          AppColors.primaryBlue,
+                                                      size: 32,
+                                                    ),
                                             loadingBuilder:
                                                 (
                                                   context,
@@ -412,15 +462,20 @@ class _UserChatsState extends ConsumerState<UserChats>
                                                   if (loadingProgress == null) {
                                                     return child;
                                                   }
-                                                  return const CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    color:
-                                                        AppColors.primaryBlue,
+                                                  return const Center(
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                          color: AppColors
+                                                              .primaryBlue,
+                                                        ),
                                                   );
                                                 },
                                           ),
                                         ),
                                       ),
+
+                                      // Unread badge
                                       if (unreadCount > 0)
                                         Positioned(
                                           top: 0,
@@ -439,47 +494,26 @@ class _UserChatsState extends ConsumerState<UserChats>
                                             ),
                                           ),
                                         ),
-                                      if (ref.watch(
-                                        isOnlineProvider(
-                                          ChatService.generateChatId(
-                                            currentUserId!,
-                                            contact.uid,
-                                          ),
-                                        ),
-                                      ))
-                                        Positioned(
-                                          right: 2,
-                                          bottom: 2,
-                                          child: Container(
-                                            width: 14,
-                                            height: 14,
-                                            decoration: BoxDecoration(
-                                              color: AppColors.onlineGreen,
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                color: AppColors.white,
-                                                width: 2,
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                      else
-                                        Positioned(
-                                          right: 2,
-                                          bottom: 2,
-                                          child: Container(
-                                            width: 14,
-                                            height: 14,
-                                            decoration: BoxDecoration(
-                                              color: AppColors.offlineGrey,
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                color: AppColors.white,
-                                                width: 2,
-                                              ),
+
+                                      // Online / offline dot
+                                      Positioned(
+                                        right: 2,
+                                        bottom: 2,
+                                        child: Container(
+                                          width: 14,
+                                          height: 14,
+                                          decoration: BoxDecoration(
+                                            color: isOnline
+                                                ? AppColors.onlineGreen
+                                                : AppColors.offlineGrey,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: AppColors.white,
+                                              width: 2,
                                             ),
                                           ),
                                         ),
+                                      ),
                                     ],
                                   );
                                 },
@@ -495,9 +529,26 @@ class _UserChatsState extends ConsumerState<UserChats>
                                   final lastMessageAsync = ref.watch(
                                     lastMessageProvider(contact.uid),
                                   );
+
+                                  // Same fix — read directly from Firebase Auth
+                                  final userId =
+                                      FirebaseAuth.instance.currentUser?.uid;
+                                  final isTyping = userId != null
+                                      ? ref.watch(
+                                          isTypingProvider(
+                                            ChatService.generateChatId(
+                                              userId,
+                                              contact.uid,
+                                            ),
+                                          ),
+                                        )
+                                      : false;
+
                                   return lastMessageAsync.when(
                                     data: (lastMessage) => Text(
-                                      lastMessage.isEmpty
+                                      isTyping
+                                          ? 'Typing...'
+                                          : lastMessage.isEmpty
                                           ? 'No messages yet'
                                           : lastMessage,
                                       maxLines: 1,

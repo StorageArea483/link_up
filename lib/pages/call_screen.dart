@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:link_up/providers/call_providers.dart';
 import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/services/call_service.dart';
+import 'package:link_up/services/notification_service.dart';
 import 'package:link_up/styles/styles.dart';
 
 class CallScreen extends ConsumerStatefulWidget {
@@ -65,8 +67,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   // ─── Current User ───
   String get _currentUserId => FirebaseAuth.instance.currentUser!.uid;
-  String get _currentUserName =>
-      FirebaseAuth.instance.currentUser!.displayName ?? 'Unknown';
 
   final Map<String, dynamic> _iceServers = {
     'iceServers': [
@@ -162,6 +162,49 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     }
   }
 
+  Future<void> _sendPushNotificationToCallee() async {
+    try {
+      final receiverDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.calleeId)
+          .get();
+      if (!receiverDoc.exists) {
+        return;
+      }
+
+      final receiverData = receiverDoc.data();
+      final receiverToken = receiverData?['fcmToken'] as String?;
+
+      if (receiverToken == null || receiverToken.isEmpty) {
+        return;
+      }
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        return;
+      }
+      final senderDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .collection('contacts')
+          .doc(widget.calleeId)
+          .get();
+
+      if (!senderDoc.exists) {
+        return;
+      }
+      final senderName = senderDoc['contact name'] ?? '';
+      final notificationService = NotificationService();
+      await notificationService.sendPushNotification(
+        deviceToken: receiverToken,
+        title: 'Incoming Call from $senderName',
+        body: 'Tap to answer',
+        messageStatus: 'sent',
+      );
+    } catch (e) {
+      // Silent failure - push notification failure is not critical for message sending
+    }
+  }
+
   Future<void> _initCall() async {
     if (mounted) {
       ref.read(navigationProvider.notifier).state = null;
@@ -179,6 +222,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     }
 
     await CallService.clearStaleDataForUser(_currentUserId);
+    await _sendPushNotificationToCallee();
     if (!mounted) return;
     // 2. Get local media
     try {
@@ -283,6 +327,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   Future<void> _startCall() async {
     try {
       final offer = await _peerConnection!.createOffer();
+      final currentUserName = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('contacts')
+          .doc(widget.calleeId)
+          .get();
       if (!mounted) return;
 
       await _peerConnection!.setLocalDescription(offer);
@@ -291,7 +341,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
       final doc = await CallService.createCall(
         callerId: _currentUserId,
-        callerName: _currentUserName,
+        callerName: currentUserName['contact name'] ?? '',
         calleeId: widget.calleeId,
         offer: jsonEncode({'sdp': offer.sdp, 'type': offer.type}),
         isVideo: widget.isVideo,

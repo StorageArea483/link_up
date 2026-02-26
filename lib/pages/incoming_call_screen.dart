@@ -3,6 +3,7 @@ import 'package:link_up/pages/call_screen.dart';
 import 'package:link_up/services/call_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/check_connection.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 
 class IncomingCallScreen extends StatefulWidget {
   final String callId;
@@ -25,6 +26,19 @@ class IncomingCallScreen extends StatefulWidget {
 }
 
 class _IncomingCallScreenState extends State<IncomingCallScreen> {
+  final _ringtonePlayer = FlutterRingtonePlayer();
+  @override
+  void initState() {
+    super.initState();
+    _ringtonePlayer.playRingtone(looping: true, volume: 1.0, asAlarm: false);
+  }
+
+  @override
+  void dispose() {
+    _ringtonePlayer.stop();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -78,6 +92,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                     label: 'Reject',
                     color: Colors.red,
                     onTap: () async {
+                      _ringtonePlayer.stop();
                       await CallService.endCall(widget.callId);
                       if (context.mounted && Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
@@ -91,6 +106,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                     label: 'Accept',
                     color: Colors.green,
                     onTap: () async {
+                      _ringtonePlayer.stop();
                       final isActive = await CallService.isCallActive(
                         widget.callId,
                       );

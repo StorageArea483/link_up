@@ -10,13 +10,12 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:link_up/providers/call_providers.dart';
 import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/services/call_service.dart';
-import 'package:link_up/services/notification_service.dart';
 import 'package:link_up/styles/styles.dart';
 
 class CallScreen extends ConsumerStatefulWidget {
   final String calleeId;
   final String calleeName;
-  final String calleeProfilePicture;
+  final String callerProfilePicture;
   final bool isVideo;
   final bool isCaller;
   final String? callId;
@@ -27,7 +26,7 @@ class CallScreen extends ConsumerStatefulWidget {
     super.key,
     required this.calleeId,
     required this.calleeName,
-    required this.calleeProfilePicture,
+    required this.callerProfilePicture,
     required this.isVideo,
     required this.isCaller,
     this.callId,
@@ -162,49 +161,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     }
   }
 
-  Future<void> _sendPushNotificationToCallee() async {
-    try {
-      final receiverDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.calleeId)
-          .get();
-      if (!receiverDoc.exists) {
-        return;
-      }
-
-      final receiverData = receiverDoc.data();
-      final receiverToken = receiverData?['fcmToken'] as String?;
-
-      if (receiverToken == null || receiverToken.isEmpty) {
-        return;
-      }
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        return;
-      }
-      final senderDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .collection('contacts')
-          .doc(widget.calleeId)
-          .get();
-
-      if (!senderDoc.exists) {
-        return;
-      }
-      final senderName = senderDoc['contact name'] ?? '';
-      final notificationService = NotificationService();
-      await notificationService.sendPushNotification(
-        deviceToken: receiverToken,
-        title: 'Incoming Call from $senderName',
-        body: 'Tap to answer',
-        messageStatus: 'sent',
-      );
-    } catch (e) {
-      // Silent failure - push notification failure is not critical for message sending
-    }
-  }
-
   Future<void> _initCall() async {
     if (mounted) {
       ref.read(navigationProvider.notifier).state = null;
@@ -222,7 +178,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     }
 
     await CallService.clearStaleDataForUser(_currentUserId);
-    await _sendPushNotificationToCallee();
     if (!mounted) return;
     // 2. Get local media
     try {
@@ -327,7 +282,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   Future<void> _startCall() async {
     try {
       final offer = await _peerConnection!.createOffer();
-      final currentUserName = await FirebaseFirestore.instance
+      final currentUserDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(_currentUserId)
           .collection('contacts')
@@ -341,7 +296,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
       final doc = await CallService.createCall(
         callerId: _currentUserId,
-        callerName: currentUserName['contact name'] ?? '',
+        callerName: currentUserDoc['contact name'] ?? '',
+        callerPhoneNumber: currentUserDoc['phone number'],
+        callerProfilePicture: currentUserDoc['photoURL'],
         calleeId: widget.calleeId,
         offer: jsonEncode({'sdp': offer.sdp, 'type': offer.type}),
         isVideo: widget.isVideo,
@@ -750,10 +707,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                             0.3,
                           ),
                           backgroundImage:
-                              widget.calleeProfilePicture.isNotEmpty
-                              ? NetworkImage(widget.calleeProfilePicture)
+                              widget.callerProfilePicture.isNotEmpty
+                              ? NetworkImage(widget.callerProfilePicture)
                               : null,
-                          child: widget.calleeProfilePicture.isEmpty
+                          child:
+                                widget.callerProfilePicture.isEmpty
                               ? const Icon(
                                   Icons.person,
                                   size: 50,

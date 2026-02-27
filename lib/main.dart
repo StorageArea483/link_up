@@ -16,12 +16,7 @@ final NotificationService notificationService = NotificationService();
 @pragma('vm:entry-point')
 Future<void> handleBackgroundMessage(RemoteMessage message) async {
   // Handle navigation when app is opened from background notification
-  if (message.data['type'] == 'call') {
-  } else {
-    notificationService.navigatorKey.currentState?.pushReplacementNamed(
-      '/chats',
-    );
-  }
+  notificationService.navigatorKey.currentState?.pushReplacementNamed('/chats');
 }
 
 void main() async {

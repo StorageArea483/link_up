@@ -65,6 +65,8 @@ class _UserChatsState extends ConsumerState<UserChats>
             child: IncomingCallScreen(
               callId: payload['\$id'] as String,
               callerName: payload['callerName'] as String? ?? 'Unknown',
+              callerPhoneNumber: payload['callerPhoneNumber'] as String,
+              callerProfilePicture: payload['callerProfilePicture'] as String,
               callerId: payload['callerId'] as String,
               offer: payload['offer'] as String,
               isVideo: payload['isVideo'] as bool? ?? true,

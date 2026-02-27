@@ -13,6 +13,8 @@ class CallService {
   static Future<Document?> createCall({
     required String callerId,
     required String callerName,
+    required String callerPhoneNumber,
+    required String callerProfilePicture,
     required String calleeId,
     required String offer, // JSON-encoded SDP offer
     required bool isVideo, // true = video call, false = audio-only
@@ -25,6 +27,8 @@ class CallService {
         data: {
           'callerId': callerId,
           'callerName': callerName,
+          'callerPhoneNumber': callerPhoneNumber,
+          'callerProfilePicture': callerProfilePicture,
           'calleeId': calleeId,
           'offer': offer,
           'answer': '', // empty until callee answers

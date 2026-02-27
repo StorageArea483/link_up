@@ -398,6 +398,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.1"
+  flutter_callkit_incoming:
+    dependency: "direct main"
+    description:
+      name: flutter_callkit_incoming
+      sha256: "993fb0f0cd990961072f0d13ff815a91773f92bfa1895be17d3366b2225ec9cd"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.5.8"
   flutter_dotenv:
     dependency: "direct main"
     description:
@@ -502,14 +510,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.33"
-  flutter_ringtone_player:
-    dependency: "direct main"
-    description:
-      name: flutter_ringtone_player
-      sha256: ae4a2caab2cfd14902f3ee5fe0307c454b396f0077fa34700238d6c4bd99cfec
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.0.0+4"
   flutter_riverpod:
     dependency: "direct main"
     description:
@@ -752,6 +752,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.2"
+  json_annotation:
+    dependency: transitive
+    description:
+      name: json_annotation
+      sha256: cb09e7dac6210041fad964ed7fbee004f14258b4eca4040f72d1234062ace4c8
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.11.0"
   just_audio:
     dependency: "direct main"
     description:

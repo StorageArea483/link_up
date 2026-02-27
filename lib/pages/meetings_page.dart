@@ -80,6 +80,8 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
             child: IncomingCallScreen(
               callId: payload['\$id'] as String,
               callerName: payload['callerName'] as String? ?? 'Unknown',
+              callerPhoneNumber: payload['callerPhoneNumber'] as String,
+              callerProfilePicture: payload['callerProfilePicture'] as String,
               callerId: payload['callerId'] as String,
               offer: payload['offer'] as String,
               isVideo: payload['isVideo'] as bool? ?? true,
@@ -443,7 +445,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                                         calleeId: contact.uid,
                                                         calleeName:
                                                             contact.name,
-                                                        calleeProfilePicture:
+                                                        callerProfilePicture:
                                                             contact
                                                                 .profilePicture,
                                                         isVideo: false,
@@ -475,7 +477,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                                         calleeId: contact.uid,
                                                         calleeName:
                                                             contact.name,
-                                                        calleeProfilePicture:
+                                                        callerProfilePicture:
                                                             contact
                                                                 .profilePicture,
                                                         isVideo: true,

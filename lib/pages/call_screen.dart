@@ -282,11 +282,16 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   Future<void> _startCall() async {
     try {
       final offer = await _peerConnection!.createOffer();
-      final currentUserDoc = await FirebaseFirestore.instance
+      final currentUserContactDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(_currentUserId)
           .collection('contacts')
           .doc(widget.calleeId)
+          .get();
+
+      final currentUserDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUserId)
           .get();
       if (!mounted) return;
 
@@ -296,10 +301,18 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
       final doc = await CallService.createCall(
         callerId: _currentUserId,
-        callerName: currentUserDoc['contact name'] ?? '',
-        callerPhoneNumber: currentUserDoc['phone number'],
-        callerProfilePicture: currentUserDoc['photoURL'],
+        callerName: currentUserDoc.data()?['name'] as String? ?? '',
+        callerPhoneNumber:
+            currentUserDoc.data()?['phoneNumber'] as String? ?? '',
+        callerProfilePicture:
+            currentUserDoc.data()?['photoURL'] as String? ?? '',
         calleeId: widget.calleeId,
+        calleeName:
+            currentUserContactDoc.data()?['contact name'] as String? ?? '',
+        calleePhoneNumber:
+            currentUserContactDoc.data()?['phone number'] as String? ?? '',
+        calleeProfilePicture:
+            currentUserContactDoc.data()?['photoURL'] as String? ?? '',
         offer: jsonEncode({'sdp': offer.sdp, 'type': offer.type}),
         isVideo: widget.isVideo,
       );
@@ -637,6 +650,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final displayName = widget.calleeName;
+    final displayPhotoUrl = widget.callerProfilePicture;
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A2E),
       body: SafeArea(
@@ -706,12 +721,10 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                           backgroundColor: AppColors.primaryBlue.withOpacity(
                             0.3,
                           ),
-                          backgroundImage:
-                              widget.callerProfilePicture.isNotEmpty
-                              ? NetworkImage(widget.callerProfilePicture)
+                          backgroundImage: displayPhotoUrl.isNotEmpty
+                              ? NetworkImage(displayPhotoUrl)
                               : null,
-                          child:
-                                widget.callerProfilePicture.isEmpty
+                          child: displayPhotoUrl.isEmpty
                               ? const Icon(
                                   Icons.person,
                                   size: 50,
@@ -721,7 +734,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          widget.calleeName,
+                          displayName,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 24,

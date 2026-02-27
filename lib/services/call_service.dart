@@ -16,6 +16,9 @@ class CallService {
     required String callerPhoneNumber,
     required String callerProfilePicture,
     required String calleeId,
+    String calleeName = '',
+    String calleePhoneNumber = '',
+    String calleeProfilePicture = '',
     required String offer, // JSON-encoded SDP offer
     required bool isVideo, // true = video call, false = audio-only
   }) async {
@@ -30,6 +33,9 @@ class CallService {
           'callerPhoneNumber': callerPhoneNumber,
           'callerProfilePicture': callerProfilePicture,
           'calleeId': calleeId,
+          'calleeName': calleeName,
+          'calleePhoneNumber': calleePhoneNumber,
+          'calleeProfilePicture': calleeProfilePicture,
           'offer': offer,
           'answer': '', // empty until callee answers
           'status': 'ringing', // ringing → answered → ended

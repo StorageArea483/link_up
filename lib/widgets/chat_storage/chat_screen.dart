@@ -472,10 +472,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
         if (isOnline) {
           final docs = await ChatService.getMessages(chatId);
+
           final sentMessages = docs.documents
               .map((doc) => Message.fromJson({'\$id': doc.$id, ...doc.data}))
               .toList();
-
           // Merge and update
           final allMessages = _mergeMessages(sentMessages, offlineMessages);
           if (mounted) {
@@ -1854,107 +1854,287 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
+  // Separate helper widget for the three-dots popup menu
+  Widget _buildOptionsMenu(Message message) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 22, color: AppColors.linkBlue),
+      padding: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      onSelected: (value) {
+        if (value == 'delete_for_me') {
+          _deleteForMe(message);
+        } else if (value == 'delete_for_everyone') {
+          _deleteForEveryone(message);
+        }
+      },
+      itemBuilder: (context) => [
+        if (message.status == 'delivered')
+          const PopupMenuItem<String>(
+            value: 'delete_for_me',
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Delete for me'),
+              ],
+            ),
+          ),
+        // Only show "Delete for everyone" for sent messages
+        if (message.status == 'sent')
+          const PopupMenuItem<String>(
+            value: 'delete_for_everyone',
+            child: Row(
+              children: [
+                Icon(Icons.delete_sweep_outlined, size: 18, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Delete for everyone'),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _deleteForMe(Message message) async {
+    try {
+      final chatId = _chatId;
+      if (chatId == null) return;
+      if (mounted) {
+        _showUploadingDialog();
+      }
+      try {
+        final existsLocally = await SqfliteHelper.messageExists(message.id);
+        if (existsLocally) {
+          // Update UI provider
+          if (!mounted) return;
+          final currentMessages = ref.read(messagesProvider(chatId));
+          final updated = currentMessages
+              .where((m) => m.id != message.id)
+              .toList();
+          ref.read(messagesProvider(chatId).notifier).state = updated;
+          // Refresh last message for contact list
+          ref.invalidate(lastMessageProvider(widget.contact.uid));
+          if (mounted) {
+            Navigator.pop(context);
+          }
+          return;
+        }
+      } catch (e) {
+        // silently deal with errors
+        log('Exception deleting message for me: $e');
+      }
+      // If we reach here nothing was deleted
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to delete message. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to delete message. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showUploadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(
+          backgroundColor: AppColors.primaryBlue,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteForEveryone(Message message) async {
+    try {
+      final chatId = _chatId;
+      if (chatId == null) return;
+      if (mounted) {
+        _showUploadingDialog();
+      }
+      final isOnline = await ref.read(networkConnectivityProvider.future);
+      if (isOnline) {
+        final deleted = await ChatService.deleteMessageFromAppwrite(message.id);
+        if (deleted) {
+          try {
+            final db = await SqfliteHelper.database;
+            await db.delete(
+              SqfliteHelper.tableMessages,
+              where: '${SqfliteHelper.columnId} = ?',
+              whereArgs: [message.id],
+            );
+          } catch (e) {
+            // silently deal with errors
+          }
+
+          if (!mounted) return;
+          final currentMessages = ref.read(messagesProvider(chatId));
+          final updated = currentMessages
+              .where((m) => m.id != message.id)
+              .toList();
+          ref.read(messagesProvider(chatId).notifier).state = updated;
+          ref.invalidate(lastMessageProvider(widget.contact.uid));
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+      } else {
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No Internet Connection. Try again later.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to delete message for everyone.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to delete message for everyone.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildMessageBubble(Message message, bool isSentByMe) {
     return Align(
       alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-        ),
-        decoration: BoxDecoration(
-          color: isSentByMe ? AppColors.primaryBlue : AppColors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isSentByMe ? 16 : 4),
-            bottomRight: Radius.circular(isSentByMe ? 4 : 16),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _buildOptionsMenu(message),
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.7,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (message.imageId != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: ImageBubble(
-                  imageId: message.imageId!,
-                  chatId:
-                      _chatId ??
-                      (_currentUserId != null
-                          ? ChatService.generateChatId(
-                              _currentUserId!,
-                              widget.contact.uid,
-                            )
-                          : null),
-                ),
-              )
-            else if (message.audioId != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: AudioBubble(
-                  audioId: message.audioId!,
-                  isSentByMe: isSentByMe,
-                  chatId:
-                      _chatId ??
-                      (_currentUserId != null
-                          ? ChatService.generateChatId(
-                              _currentUserId!,
-                              widget.contact.uid,
-                            )
-                          : null),
-                ),
+            decoration: BoxDecoration(
+              color: isSentByMe ? AppColors.primaryBlue : AppColors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(isSentByMe ? 16 : 4),
+                bottomRight: Radius.circular(isSentByMe ? 4 : 16),
               ),
-            if (message.text.isNotEmpty &&
-                (message.imageId == null || message.text != 'Image') &&
-                (message.audioId == null || message.text != 'Audio'))
-              Text(
-                message.text,
-                style: TextStyle(
-                  color: isSentByMe ? Colors.white : AppColors.textPrimary,
-                  fontSize: 14,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _formatTime(message.createdAt),
-                  style: TextStyle(
-                    color: isSentByMe
-                        ? Colors.white.withOpacity(0.7)
-                        : AppColors.textFooter,
-                    fontSize: 10,
-                  ),
-                ),
-                if (isSentByMe) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    message.status == 'read'
-                        ? Icons.done_all
-                        : message.status == 'delivered'
-                        ? Icons.done_all
-                        : Icons.done,
-                    size: 14,
-                    color: message.status == 'read'
-                        ? Colors.blue[200]
-                        : Colors.white.withOpacity(0.7),
-                  ),
-                ],
               ],
             ),
-          ],
-        ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (message.imageId != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: ImageBubble(
+                      imageId: message.imageId!,
+                      chatId:
+                          _chatId ??
+                          (_currentUserId != null
+                              ? ChatService.generateChatId(
+                                  _currentUserId!,
+                                  widget.contact.uid,
+                                )
+                              : null),
+                    ),
+                  )
+                else if (message.audioId != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: AudioBubble(
+                      audioId: message.audioId!,
+                      isSentByMe: isSentByMe,
+                      chatId:
+                          _chatId ??
+                          (_currentUserId != null
+                              ? ChatService.generateChatId(
+                                  _currentUserId!,
+                                  widget.contact.uid,
+                                )
+                              : null),
+                    ),
+                  ),
+                if (message.text.isNotEmpty &&
+                    (message.imageId == null || message.text != 'Image') &&
+                    (message.audioId == null || message.text != 'Audio'))
+                  Text(
+                    message.text,
+                    style: TextStyle(
+                      color: isSentByMe ? Colors.white : AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _formatTime(message.createdAt),
+                      style: TextStyle(
+                        color: isSentByMe
+                            ? Colors.white.withOpacity(0.7)
+                            : AppColors.textFooter,
+                        fontSize: 10,
+                      ),
+                    ),
+                    if (isSentByMe) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        message.status == 'read'
+                            ? Icons.done_all
+                            : message.status == 'delivered'
+                            ? Icons.done_all
+                            : Icons.done,
+                        size: 14,
+                        color: message.status == 'read'
+                            ? Colors.blue[200]
+                            : Colors.white.withOpacity(0.7),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

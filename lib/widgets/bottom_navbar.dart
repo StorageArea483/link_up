@@ -36,11 +36,6 @@ class BottomNavbar extends StatelessWidget {
           label: 'Chats',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline_rounded),
-          activeIcon: Icon(Icons.person_rounded),
-          label: 'Contacts',
-        ),
-        BottomNavigationBarItem(
           icon: Icon(Icons.more_horiz_rounded),
           label: 'More',
         ),

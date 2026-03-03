@@ -245,7 +245,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       if (mounted) {
         _remoteRenderer.srcObject = stream;
         ref.read(callProvider.notifier).isConnected = true;
-        _startCallTimer();
+        Future.delayed(const Duration(seconds: 1), _startCallTimer);
       }
     };
 
@@ -291,6 +291,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
       final currentUserDoc = await FirebaseFirestore.instance
           .collection('users')
+          .doc(widget.calleeId)
+          .collection('contacts')
           .doc(_currentUserId)
           .get();
       if (!mounted) return;
@@ -301,9 +303,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
       final doc = await CallService.createCall(
         callerId: _currentUserId,
-        callerName: currentUserDoc.data()?['name'] as String? ?? '',
+        callerName: currentUserDoc.data()?['contact name'] as String? ?? '',
         callerPhoneNumber:
-            currentUserDoc.data()?['phoneNumber'] as String? ?? '',
+            currentUserDoc.data()?['phone number'] as String? ?? '',
         callerProfilePicture:
             currentUserDoc.data()?['photoURL'] as String? ?? '',
         calleeId: widget.calleeId,

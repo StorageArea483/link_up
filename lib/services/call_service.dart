@@ -311,6 +311,18 @@ class CallService {
     }
   }
 
+  static Future<void> deleteCall(String callId) async {
+    try {
+      await databases.deleteDocument(
+        databaseId: databaseId,
+        collectionId: callSummaryCollectionId,
+        documentId: callId,
+      );
+    } catch (e) {
+      log('Failed to delete call $callId: $e', name: 'CallService');
+    }
+  }
+
   static Future<void> cleanupCall(String callId) async {
     try {
       // Delete ICE candidates for this call

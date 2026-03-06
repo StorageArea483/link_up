@@ -613,89 +613,105 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                                       }
                                     }
 
-                                    return Container(
-                                      margin: const EdgeInsets.only(bottom: 10),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 14,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surface,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            height: 48,
-                                            width: 48,
-                                            decoration: BoxDecoration(
-                                              color: isVideo
-                                                  ? AppColors.primaryBlue
-                                                        .withOpacity(0.1)
-                                                  : AppColors.onlineGreen
-                                                        .withOpacity(0.1),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Icon(
-                                              isVideo
-                                                  ? Icons.videocam_rounded
-                                                  : Icons.call_rounded,
-                                              color: isVideo
-                                                  ? AppColors.primaryBlue
-                                                  : AppColors.onlineGreen,
-                                              size: 22,
-                                            ),
+                                    return Dismissible(
+                                      key: Key(log.data['\$id']),
+                                      direction: DismissDirection.horizontal,
+                                      onDismissed: (direction) async {
+                                        await CallService.deleteCall(
+                                          log.data['\$id'],
+                                        );
+                                        ref.invalidate(callLogProvider);
+                                      },
+                                      child: Container(
+                                        margin: const EdgeInsets.only(
+                                          bottom: 10,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 14,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.surface,
+                                          borderRadius: BorderRadius.circular(
+                                            16,
                                           ),
-                                          const SizedBox(width: 14),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  callerName,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: AppTextStyles.button
-                                                      .copyWith(fontSize: 16),
-                                                ),
-                                                const SizedBox(height: 3),
-                                                Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons
-                                                          .call_received_rounded,
-                                                      color: status == 'missed'
-                                                          ? Colors.redAccent
-                                                          : AppColors
-                                                                .onlineGreen,
-                                                      size: 14,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      callerPhone.isNotEmpty
-                                                          ? callerPhone
-                                                          : (isVideo
-                                                                ? 'Video Call'
-                                                                : 'Audio Call'),
-                                                      style: AppTextStyles.body
-                                                          .copyWith(
-                                                            fontSize: 13,
-                                                          ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              height: 48,
+                                              width: 48,
+                                              decoration: BoxDecoration(
+                                                color: isVideo
+                                                    ? AppColors.primaryBlue
+                                                          .withOpacity(0.1)
+                                                    : AppColors.onlineGreen
+                                                          .withOpacity(0.1),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                isVideo
+                                                    ? Icons.videocam_rounded
+                                                    : Icons.call_rounded,
+                                                color: isVideo
+                                                    ? AppColors.primaryBlue
+                                                    : AppColors.onlineGreen,
+                                                size: 22,
+                                              ),
                                             ),
-                                          ),
-                                          if (formattedTime.isNotEmpty)
-                                            Text(
-                                              formattedTime,
-                                              style: AppTextStyles.footer
-                                                  .copyWith(fontSize: 12),
+                                            const SizedBox(width: 14),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    callerName,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: AppTextStyles.button
+                                                        .copyWith(fontSize: 16),
+                                                  ),
+                                                  const SizedBox(height: 3),
+                                                  Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons
+                                                            .call_received_rounded,
+                                                        color:
+                                                            status == 'missed'
+                                                            ? Colors.redAccent
+                                                            : AppColors
+                                                                  .onlineGreen,
+                                                        size: 14,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        callerPhone.isNotEmpty
+                                                            ? callerPhone
+                                                            : (isVideo
+                                                                  ? 'Video Call'
+                                                                  : 'Audio Call'),
+                                                        style: AppTextStyles
+                                                            .body
+                                                            .copyWith(
+                                                              fontSize: 13,
+                                                            ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                        ],
+                                            if (formattedTime.isNotEmpty)
+                                              Text(
+                                                formattedTime,
+                                                style: AppTextStyles.footer
+                                                    .copyWith(fontSize: 12),
+                                              ),
+                                          ],
+                                        ),
                                       ),
                                     );
                                   },

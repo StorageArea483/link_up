@@ -244,8 +244,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
       if (mounted) {
         _remoteRenderer.srcObject = stream;
-        ref.read(callProvider.notifier).isConnected = true;
-        Future.delayed(const Duration(seconds: 1), _startCallTimer);
       }
     };
 
@@ -257,6 +255,14 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         log('[ICE STATE] ✅ Connected — enabling speakerphone');
         _iceFailureCount = 0; // reset on success
         await Helper.setSpeakerphoneOn(true);
+        // Mark the call as connected so the UI switches from "Ringing..." to
+        // "Connected" on both the caller and callee side immediately, without
+        // waiting for onTrack to fire.
+        if (mounted) {
+          ref.read(callProvider.notifier).isConnected = true;
+        }
+        // Start the call duration timer now that P2P is confirmed established.
+        _startCallTimer();
       }
 
       if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {

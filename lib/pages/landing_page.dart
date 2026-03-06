@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/pages/google_signup.dart';
 import 'package:link_up/pages/incoming_call_screen.dart';
+import 'package:link_up/pages/meetings_page.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/providers/loading_provider.dart';
 import 'package:link_up/providers/random_num_provider.dart';
@@ -546,7 +547,18 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                                           ),
                                           const SizedBox(height: 14),
                                           TextButton(
-                                            onPressed: () {},
+                                            onPressed: () {
+                                              Navigator.of(
+                                                context,
+                                              ).pushReplacement(
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      const CheckConnection(
+                                                        child: MeetingsPage(),
+                                                      ),
+                                                ),
+                                              );
+                                            },
                                             child: const Text(
                                               'Start a call',
                                               style: AppTextStyles.link,

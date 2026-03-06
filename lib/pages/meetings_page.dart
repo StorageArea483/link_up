@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:link_up/models/user_contacts.dart';
 import 'package:link_up/widgets/call_storage/call_screen.dart';
 import 'package:link_up/pages/incoming_call_screen.dart';
 import 'package:link_up/pages/landing_page.dart';
@@ -26,22 +25,99 @@ class MeetingsPage extends ConsumerStatefulWidget {
   ConsumerState<MeetingsPage> createState() => _MeetingsPageState();
 }
 
-class _MeetingsPageState extends ConsumerState<MeetingsPage> {
+class _MeetingsPageState extends ConsumerState<MeetingsPage>
+    with WidgetsBindingObserver {
   StreamSubscription? _incomingCallSub;
   final TextEditingController _searchController = TextEditingController();
-  final Map<String, StreamSubscription> _presenceSubscription = {};
+
+  // List-based subscriptions — same pattern as user_chats.dart so every
+  // contact stays subscribed (a Map/single field would cancel the previous
+  // one on each iteration).
+  final List<StreamSubscription> _presenceSubscriptions = [];
+
   String? currentUserId;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initialize();
       _listenForIncomingCalls();
     });
   }
 
-  void _initialize() async {
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _incomingCallSub?.cancel();
+    for (final sub in _presenceSubscriptions) {
+      sub.cancel();
+    }
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (!mounted) return;
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _handleAppResumed();
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        _handleAppPaused();
+        break;
+      case AppLifecycleState.detached:
+        _handleAppDetached();
+        break;
+    }
+  }
+
+  void _handleAppDetached() {
+    for (final sub in _presenceSubscriptions) {
+      sub.cancel();
+    }
+    _presenceSubscriptions.clear();
+  }
+
+  void _handleAppPaused() {
+    if (!mounted) return;
+    for (final sub in _presenceSubscriptions) {
+      sub.pause();
+    }
+    ref.read(userContactProvider).whenData((contacts) {
+      for (final contact in contacts) {
+        ref.read(isOnlineProvider(contact.uid).notifier).state = false;
+      }
+    });
+  }
+
+  void _handleAppResumed() {
+    if (!mounted) return;
+    currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    // Re-fetch real presence values from DB and resume/re-establish subs.
+    if (_presenceSubscriptions.isEmpty) {
+      _resubscribeFromProvider();
+    } else {
+      ref.read(userContactProvider).whenData((contacts) {
+        for (final contact in contacts) {
+          _fetchAndSetPresence(contact.uid);
+        }
+      });
+      for (final sub in _presenceSubscriptions) {
+        if (sub.isPaused) sub.resume();
+      }
+    }
+  }
+
+  Future<void> _initialize() async {
     if (!mounted) return;
     ref.read(navigationProvider.notifier).state = null;
 
@@ -49,10 +125,15 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
     if (currentUserId == null) return;
 
     try {
-      // Await the future so contacts are actually loaded before subscribing
       final contacts = await ref.read(userContactProvider.future);
       if (!mounted) return;
-      _subscribeToPresence(contacts);
+      for (final contact in contacts) {
+        if (!mounted) return;
+        // Fetch real DB value immediately so the dot is correct on page open.
+        _fetchAndSetPresence(contact.uid);
+        // Then keep it live with a realtime subscription.
+        _subscribeToPresence(contact.uid);
+      }
     } catch (e) {
       // Continue if pre-loading fails
     }
@@ -71,8 +152,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
       if (!isOnline) {
         return;
       }
-      final payload =
-          response.payload; // ringing call data extracted from appwrite
+      final payload = response.payload;
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => CheckConnection(
@@ -91,25 +171,32 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
     });
   }
 
-  void _subscribeToPresence(List<UserContacts> contacts) {
-    if (currentUserId == null) return;
-    for (final contact in contacts) {
-      // Cancel existing before creating new
-      _presenceSubscription[contact.uid]?.cancel();
+  Future<void> _fetchAndSetPresence(String contactId) async {
+    try {
+      if (!mounted) return;
+      final doc = await ChatService.getUserPresence(contactId);
+      if (!mounted) return;
+      ref.read(isOnlineProvider(contactId).notifier).state =
+          doc?.data['online'] ?? false;
+    } catch (e, stack) {
+      log(
+        'ERROR in _MeetingsPageState._fetchAndSetPresence: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
 
-      _presenceSubscription[contact
-          .uid] = ChatService.subscribeToPresence(contact.uid, (response) {
+  void _subscribeToPresence(String contactId) {
+    try {
+      if (!mounted) return;
+      final sub = ChatService.subscribeToPresence(contactId, (response) {
         if (!mounted) return;
         try {
           final isOnline = response.payload['online'] ?? false;
-          ref
-                  .read(
-                    isOnlineProvider(
-                      ChatService.generateChatId(currentUserId!, contact.uid),
-                    ).notifier,
-                  )
-                  .state =
-              isOnline;
+          // Key matches _fetchAndSetPresence and how the UI watches the provider.
+          ref.read(isOnlineProvider(contactId).notifier).state = isOnline;
         } catch (e, stack) {
           log(
             'ERROR in _MeetingsPageState._subscribeToPresence callback: $e\nSTACK: $stack',
@@ -119,21 +206,67 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
           );
         }
       });
+      if (sub != null) _presenceSubscriptions.add(sub);
+    } catch (e, stack) {
+      log(
+        'ERROR in _MeetingsPageState._subscribeToPresence: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 
-  @override
-  void dispose() {
-    _incomingCallSub?.cancel();
-    for (final sub in _presenceSubscription.values) {
+  /// Cancels + clears all subs, then re-subscribes for every contact using
+  /// the already-cached provider value (no async needed).
+  void _resubscribeFromProvider() {
+    for (final sub in _presenceSubscriptions) {
       sub.cancel();
     }
-    _searchController.dispose();
-    super.dispose();
+    _presenceSubscriptions.clear();
+
+    ref.read(userContactProvider).whenData((contacts) {
+      for (final contact in contacts) {
+        if (!mounted) return;
+        _fetchAndSetPresence(contact.uid);
+        _subscribeToPresence(contact.uid);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Reset all presence to false when network drops; re-fetch when it returns.
+    ref.listen<AsyncValue<bool>>(networkConnectivityProvider, (previous, next) {
+      if (!mounted) return;
+      next.whenData((isOnline) async {
+        if (isOnline) {
+          currentUserId = FirebaseAuth.instance.currentUser?.uid;
+          try {
+            if (!mounted) return;
+            _resubscribeFromProvider();
+          } catch (e, stack) {
+            log(
+              'ERROR in _MeetingsPageState networkConnectivityProvider listener: $e\nSTACK: $stack',
+              name: 'DEBUG_SUBSCRIPTION',
+              error: e,
+              stackTrace: stack,
+            );
+          }
+        } else {
+          // Going offline — reset all dots to offline immediately.
+          for (final sub in _presenceSubscriptions) {
+            sub.pause();
+          }
+          ref.read(userContactProvider).whenData((contacts) {
+            for (final contact in contacts) {
+              ref.read(isOnlineProvider(contact.uid).notifier).state = false;
+            }
+          });
+        }
+      });
+    });
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -340,7 +473,6 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                 final hasProfilePicture = contact.profilePicture
                                     .trim()
                                     .isNotEmpty;
-                                // Read synchronously from Firebase — guaranteed non-null inside CheckConnection
                                 final userId =
                                     FirebaseAuth.instance.currentUser?.uid;
                                 if (userId == null) {
@@ -428,13 +560,10 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                         _ActionCircleButton(
                                           icon: Icons.call_rounded,
                                           onPressed: () {
-                                            final isOnline = ref.watch(
-                                              isOnlineProvider(
-                                                ChatService.generateChatId(
-                                                  userId,
-                                                  contact.uid,
-                                                ),
-                                              ),
+                                            // Read by contact.uid — consistent
+                                            // with how the provider is keyed.
+                                            final isOnline = ref.read(
+                                              isOnlineProvider(contact.uid),
                                             );
                                             Navigator.of(context).push(
                                               MaterialPageRoute(
@@ -460,13 +589,8 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                                         _ActionCircleButton(
                                           icon: Icons.videocam_rounded,
                                           onPressed: () {
-                                            final isOnline = ref.watch(
-                                              isOnlineProvider(
-                                                ChatService.generateChatId(
-                                                  userId,
-                                                  contact.uid,
-                                                ),
-                                              ),
+                                            final isOnline = ref.read(
+                                              isOnlineProvider(contact.uid),
                                             );
                                             Navigator.of(context).push(
                                               MaterialPageRoute(

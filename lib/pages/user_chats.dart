@@ -160,6 +160,9 @@ class _UserChatsState extends ConsumerState<UserChats>
     for (final sub in _typingSubscriptions) {
       sub.pause();
     }
+    // Reset all contact presence providers to offline when network drops.
+    // The realtime subscription is paused so no updates will arrive, and
+    // the stale online state would remain visible without this reset.
     ref.read(userContactProvider).whenData((contacts) {
       for (final contact in contacts) {
         ref.read(isOnlineProvider(contact.uid).notifier).state = false;
@@ -168,6 +171,11 @@ class _UserChatsState extends ConsumerState<UserChats>
   }
 
   void _resumeAllSubscriptions() {
+    ref.read(userContactProvider).whenData((contacts) {
+      for (final contact in contacts) {
+        _fetchAndSetPresence(contact.uid);
+      }
+    });
     if (messageSubscription == null) {
       _subscribeToMessages();
     } else if (messageSubscription!.isPaused) {

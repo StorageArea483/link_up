@@ -142,7 +142,9 @@ class SqfliteMsgsClear {
             children: [
               Icon(Icons.check_circle, color: Colors.white, size: 20),
               SizedBox(width: 12),
-              Text('All messages and media cleared successfully'),
+              Expanded(
+                child: Text('All messages and media cleared successfully'),
+              ),
             ],
           ),
           backgroundColor: Colors.green,

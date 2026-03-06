@@ -578,6 +578,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       messageSubscription = ChatService.subscribeToMessages(chatId, (response) {
         if (_isTearingDown || !mounted) return;
         try {
+          // Skip Appwrite DELETE events entirely.
+          // When _handleDeliveredMessage deletes the document from Appwrite
+          // after delivery, a delete realtime event fires back into this same
+          // subscription. The delete payload still carries the old document
+          // data, which causes the message to be "updated" again in the UI and
+          // _handleDeliveredMessage to be called a second time — triggering a
+          // duplicate delete attempt and a UI flicker. Checking the event type
+          // here breaks that loop.
+          final isDeleteEvent = response.events.any(
+            (e) => e.contains('.delete'),
+          );
+          if (isDeleteEvent) return;
+
           final newMessage = Message.fromJson(response.payload);
 
           if (_isTearingDown || !mounted) return;
@@ -589,6 +602,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           );
 
           if (existingIndex != -1) {
+            // Existing message updated (e.g. sent → delivered)
             final updatedMessages = [...currentMessages];
             updatedMessages[existingIndex] = newMessage;
             if (_isTearingDown || !mounted) return;

@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/models/user_contacts.dart';
-import 'package:link_up/pages/call_screen.dart';
+import 'package:link_up/widgets/call_storage/call_screen.dart';
 import 'package:link_up/pages/incoming_call_screen.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/providers/chat_providers.dart';
@@ -45,7 +45,6 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
     if (!mounted) return;
     ref.read(navigationProvider.notifier).state = null;
 
-    // Always assign, never ??=
     currentUserId = FirebaseAuth.instance.currentUser?.uid;
     if (currentUserId == null) return;
 
@@ -511,13 +510,6 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
               );
             },
           ),
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {},
-          backgroundColor: AppColors.linkBlue,
-          foregroundColor: AppColors.white,
-          shape: const CircleBorder(),
-          child: const Icon(Icons.add_rounded, size: 30),
         ),
         bottomNavigationBar: const BottomNavbar(currentIndex: 1),
       ),

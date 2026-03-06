@@ -9,6 +9,7 @@ class CallService {
   static const String databaseId = 'linkup_db';
   static const String callsCollectionId = 'calls';
   static const String iceCandidatesCollectionId = 'ice_candidates';
+  static const String callSummaryCollectionId = 'call_summary';
 
   static Future<Document?> createCall({
     required String callerId,
@@ -61,6 +62,50 @@ class CallService {
       );
     } catch (e) {
       log('Error answering call: $e', name: 'CallService');
+      return null;
+    }
+  }
+
+  static Future<void> createCallSummary({
+    required String callerId,
+    required String callerName,
+    required String callerPhoneNumber,
+    required String receiverId,
+    required String status,
+    required bool isVideo,
+  }) async {
+    try {
+      await databases.createDocument(
+        databaseId: databaseId,
+        collectionId: callSummaryCollectionId,
+        documentId: ID.unique(),
+        data: {
+          'callerId': callerId,
+          'callerName': callerName,
+          'callerPhoneNumber': callerPhoneNumber,
+          'recieverId': receiverId,
+          'status': status,
+          'isVideo': isVideo,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      log('Error creating call summary: $e', name: 'CallService');
+    }
+  }
+
+  static Future<DocumentList?> getUserCallLogs(String userId) async {
+    try {
+      return await databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: callSummaryCollectionId,
+        queries: [
+          Query.equal('recieverId', userId),
+          Query.orderDesc('timestamp'),
+        ],
+      );
+    } catch (e) {
+      log('Error getting call logs: $e', name: 'CallService');
       return null;
     }
   }

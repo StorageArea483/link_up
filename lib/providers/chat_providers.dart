@@ -17,12 +17,12 @@ final messagesProvider = StateProvider.family<List<Message>, String>(
 
 // Typing indicator provider
 final isTypingProvider = StateProvider.family<bool, String>(
-  (ref, chatId) => false,
+  (ref, contactId) => false,
 );
 
 // Online status provider
 final isOnlineProvider = StateProvider.family<bool, String>(
-  (ref, chatId) => false,
+  (ref, contactId) => false,
 );
 
 // Current user ID provider

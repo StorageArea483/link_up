@@ -1,11 +1,12 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:link_up/pages/google_signup.dart';
 import 'package:link_up/pages/incoming_call_screen.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/providers/loading_provider.dart';
 import 'package:link_up/providers/random_num_provider.dart';
+import 'package:link_up/providers/call_log_provider.dart';
 import 'package:link_up/services/call_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/add_new_contact/qr_code.dart';
@@ -53,6 +54,19 @@ class _LandingPageState extends ConsumerState<LandingPage> {
       }
       final payload =
           response.payload; // ringing call data extracted from appwrite
+
+      // Log the incoming call to call_summary
+      CallService.createCallSummary(
+        callerId: payload['callerId'] as String,
+        callerName: payload['callerName'] as String? ?? 'Unknown',
+        callerPhoneNumber: payload['callerPhoneNumber'] as String? ?? '',
+        receiverId: currentUser.uid,
+        status: 'incoming',
+        isVideo: payload['isVideo'] as bool? ?? true,
+      );
+      // Refresh call logs so the UI updates
+      ref.invalidate(callLogProvider);
+
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => CheckConnection(
@@ -75,6 +89,98 @@ class _LandingPageState extends ConsumerState<LandingPage> {
   void dispose() {
     _incomingCallSub?.cancel();
     super.dispose();
+  }
+
+  void _showAlertDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.lightBlue.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Colors.lightBlue,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text('Logout', style: AppTextStyles.title.copyWith(fontSize: 22)),
+              const SizedBox(height: 10),
+              const Text(
+                'Are you sure you want to logout from LinkUp?',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body,
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        side: const BorderSide(color: AppColors.divider),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: AppTextStyles.button.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        FirebaseAuth.instance.signOut();
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (context) => const GoogleSignup(),
+                          ),
+                          (route) => false,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.lightBlue,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Logout',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -101,9 +207,14 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                 color: AppColors.iconBackground,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.notifications_none_rounded,
-                color: AppColors.textPrimary,
+              child: IconButton(
+                onPressed: () {
+                  _showAlertDialog();
+                },
+                icon: const Icon(
+                  Icons.logout_rounded,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
           ),
@@ -385,51 +496,211 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                       'RECENT CALLS',
                       style: AppTextStyles.sectionLabel,
                     ),
-                    const SizedBox(height: 40),
-                    Center(
-                      child: Column(
-                        children: [
-                          Container(
-                            height: 80,
-                            width: 80,
-                            decoration: BoxDecoration(
-                              color: AppColors.divider.withOpacity(0.35),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.call_outlined,
-                              color: AppColors.textFooter,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          Text(
-                            'No calls yet',
-                            style: AppTextStyles.subtitle.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const SizedBox(
-                            width: 220,
-                            child: Text(
-                              'Calls you make or receive will appear here.',
-                              style: AppTextStyles.body,
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          TextButton(
-                            onPressed: () {},
-                            child: const Text(
-                              'Start a call',
-                              style: AppTextStyles.link,
-                            ),
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 12),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        return ref
+                            .watch(callLogProvider)
+                            .when(
+                              skipLoadingOnRefresh: false,
+                              skipLoadingOnReload: false,
+                              data: (callLogs) {
+                                if (callLogs.isEmpty) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 28),
+                                    child: Center(
+                                      child: Column(
+                                        children: [
+                                          Container(
+                                            height: 80,
+                                            width: 80,
+                                            decoration: BoxDecoration(
+                                              color: AppColors.divider
+                                                  .withOpacity(0.35),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.call_outlined,
+                                              color: AppColors.textFooter,
+                                              size: 28,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 18),
+                                          Text(
+                                            'No calls yet',
+                                            style: AppTextStyles.subtitle
+                                                .copyWith(
+                                                  color: AppColors.textPrimary,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 18,
+                                                ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          const SizedBox(
+                                            width: 220,
+                                            child: Text(
+                                              'Calls you make or receive will appear here.',
+                                              style: AppTextStyles.body,
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          TextButton(
+                                            onPressed: () {},
+                                            child: const Text(
+                                              'Start a call',
+                                              style: AppTextStyles.link,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                return ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: callLogs.length,
+                                  itemBuilder: (context, index) {
+                                    final log = callLogs[index];
+                                    final callerName =
+                                        log.data['callerName'] as String? ??
+                                        'Unknown';
+                                    final callerPhone =
+                                        log.data['callerPhoneNumber']
+                                            as String? ??
+                                        '';
+                                    final isVideo =
+                                        log.data['isVideo'] as bool? ?? false;
+                                    final status =
+                                        log.data['status'] as String? ?? '';
+                                    final timestamp =
+                                        log.data['timestamp'] as String? ?? '';
+
+                                    // Format timestamp
+                                    String formattedTime = '';
+                                    if (timestamp.isNotEmpty) {
+                                      try {
+                                        final dt = DateTime.parse(timestamp);
+                                        final now = DateTime.now();
+                                        final diff = now.difference(dt);
+                                        if (diff.inMinutes < 1) {
+                                          formattedTime = 'Just now';
+                                        } else if (diff.inMinutes < 60) {
+                                          formattedTime =
+                                              '${diff.inMinutes}m ago';
+                                        } else if (diff.inHours < 24) {
+                                          formattedTime =
+                                              '${diff.inHours}h ago';
+                                        } else {
+                                          formattedTime = '${diff.inDays}d ago';
+                                        }
+                                      } catch (_) {
+                                        formattedTime = '';
+                                      }
+                                    }
+
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 14,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surface,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            height: 48,
+                                            width: 48,
+                                            decoration: BoxDecoration(
+                                              color: isVideo
+                                                  ? AppColors.primaryBlue
+                                                        .withOpacity(0.1)
+                                                  : AppColors.onlineGreen
+                                                        .withOpacity(0.1),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              isVideo
+                                                  ? Icons.videocam_rounded
+                                                  : Icons.call_rounded,
+                                              color: isVideo
+                                                  ? AppColors.primaryBlue
+                                                  : AppColors.onlineGreen,
+                                              size: 22,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  callerName,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: AppTextStyles.button
+                                                      .copyWith(fontSize: 16),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons
+                                                          .call_received_rounded,
+                                                      color: status == 'missed'
+                                                          ? Colors.redAccent
+                                                          : AppColors
+                                                                .onlineGreen,
+                                                      size: 14,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      callerPhone.isNotEmpty
+                                                          ? callerPhone
+                                                          : (isVideo
+                                                                ? 'Video Call'
+                                                                : 'Audio Call'),
+                                                      style: AppTextStyles.body
+                                                          .copyWith(
+                                                            fontSize: 13,
+                                                          ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (formattedTime.isNotEmpty)
+                                            Text(
+                                              formattedTime,
+                                              style: AppTextStyles.footer
+                                                  .copyWith(fontSize: 12),
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                              loading: () => const Padding(
+                                padding: EdgeInsets.only(top: 40),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                ),
+                              ),
+                              error: (err, stack) =>
+                                  AppErrorWidget(provider: callLogProvider),
+                            );
+                      },
                     ),
                     const SizedBox(height: 80),
                   ],

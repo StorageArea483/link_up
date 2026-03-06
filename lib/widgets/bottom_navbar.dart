@@ -35,10 +35,6 @@ class BottomNavbar extends StatelessWidget {
           activeIcon: Icon(Icons.chat_bubble_rounded),
           label: 'Chats',
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.more_horiz_rounded),
-          label: 'More',
-        ),
       ],
       onTap: (index) {
         if (index == currentIndex) return;

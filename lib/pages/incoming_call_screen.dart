@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_callkit_incoming/entities/entities.dart';
-import 'package:link_up/pages/call_screen.dart';
 import 'package:link_up/services/call_service.dart';
 import 'package:link_up/styles/styles.dart';
+import 'package:link_up/widgets/call_storage/call_screen.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 

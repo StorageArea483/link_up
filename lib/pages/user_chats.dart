@@ -29,8 +29,8 @@ class _UserChatsState extends ConsumerState<UserChats>
     with WidgetsBindingObserver {
   StreamSubscription? messageSubscription;
   StreamSubscription? _incomingCallSub;
-  final Map<String, StreamSubscription> _presenceSubscriptions = {};
-  final Map<String, StreamSubscription> _typingSubscriptions = {};
+  final List<StreamSubscription> _presenceSubscriptions = [];
+  final List<StreamSubscription> _typingSubscriptions = [];
 
   String? currentUserId;
 
@@ -82,14 +82,12 @@ class _UserChatsState extends ConsumerState<UserChats>
     WidgetsBinding.instance.removeObserver(this);
     messageSubscription?.cancel();
     _incomingCallSub?.cancel();
-    for (final sub in _presenceSubscriptions.values) {
+    for (final sub in _presenceSubscriptions) {
       sub.cancel();
     }
-    for (final sub in _typingSubscriptions.values) {
+    for (final sub in _typingSubscriptions) {
       sub.cancel();
     }
-    _presenceSubscriptions.clear();
-    _typingSubscriptions.clear();
     super.dispose();
   }
 
@@ -134,7 +132,6 @@ class _UserChatsState extends ConsumerState<UserChats>
       final contacts = await ref.read(userContactProvider.future);
       if (!mounted) return;
       _invalidateContactProviders(contacts);
-      _resubscribeContactStreams(contacts);
     } catch (e, stack) {
       log(
         'ERROR in _UserChatsState._handleAppResumed: $e\nSTACK: $stack',
@@ -157,13 +154,17 @@ class _UserChatsState extends ConsumerState<UserChats>
 
   void _pauseAllSubscriptions() {
     messageSubscription?.pause();
-
-    for (final sub in _presenceSubscriptions.values) {
+    for (final sub in _presenceSubscriptions) {
       sub.pause();
     }
-    for (final sub in _typingSubscriptions.values) {
+    for (final sub in _typingSubscriptions) {
       sub.pause();
     }
+    ref.read(userContactProvider).whenData((contacts) {
+      for (final contact in contacts) {
+        ref.read(isOnlineProvider(contact.uid).notifier).state = false;
+      }
+    });
   }
 
   void _resumeAllSubscriptions() {
@@ -172,14 +173,18 @@ class _UserChatsState extends ConsumerState<UserChats>
     } else if (messageSubscription!.isPaused) {
       messageSubscription!.resume();
     }
-    for (final sub in _presenceSubscriptions.values) {
-      if (sub.isPaused) {
-        sub.resume();
+    if (_presenceSubscriptions.isEmpty) {
+      _resubscribeContactStreamsFromProvider();
+    } else {
+      for (final sub in _presenceSubscriptions) {
+        if (sub.isPaused) sub.resume();
       }
     }
-    for (final sub in _typingSubscriptions.values) {
-      if (sub.isPaused) {
-        sub.resume();
+    if (_typingSubscriptions.isEmpty) {
+      _resubscribeContactStreamsFromProvider();
+    } else {
+      for (final sub in _typingSubscriptions) {
+        if (sub.isPaused) sub.resume();
       }
     }
   }
@@ -191,19 +196,6 @@ class _UserChatsState extends ConsumerState<UserChats>
       if (!mounted) return;
       ref.invalidate(lastMessageProvider(contact.uid));
       ref.invalidate(unreadCountProvider(contact.uid));
-    }
-  }
-
-  /// Re-subscribes to presence and typing streams for all contacts.
-  /// Call this after resuming, reconnecting, or initializing.
-  void _resubscribeContactStreams(List<dynamic> contacts) {
-    if (currentUserId == null) return;
-    for (final contact in contacts) {
-      if (!mounted) return;
-      _subscribeToPresence(contact.uid);
-      _subscribeToTyping(
-        ChatService.generateChatId(currentUserId!, contact.uid),
-      );
     }
   }
 
@@ -258,23 +250,35 @@ class _UserChatsState extends ConsumerState<UserChats>
     }
   }
 
+  /// One-time manual fetch of a contact's presence document from the database.
+  /// Immediately seeds [isOnlineProvider] with the current value so the UI
+  /// shows the correct online/offline dot as soon as the page opens, before
+  /// any realtime event has arrived.
+  Future<void> _fetchAndSetPresence(String contactId) async {
+    try {
+      if (!mounted) return;
+      final doc = await ChatService.getUserPresence(contactId);
+      if (!mounted) return;
+      final isOnline = doc?.data['online'] ?? false;
+      ref.read(isOnlineProvider(contactId).notifier).state = isOnline;
+    } catch (e, stack) {
+      log(
+        'ERROR in _UserChatsState._fetchAndSetPresence: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
   void _subscribeToPresence(String contactId) {
-    if (!mounted || currentUserId == null) return;
-    _presenceSubscriptions[contactId]?.cancel();
-    _presenceSubscriptions[contactId] = ChatService.subscribeToPresence(
-      contactId,
-      (response) {
+    try {
+      if (!mounted) return;
+      final sub = ChatService.subscribeToPresence(contactId, (response) {
         if (!mounted) return;
         try {
           final isOnline = response.payload['online'] ?? false;
-          ref
-                  .read(
-                    isOnlineProvider(
-                      ChatService.generateChatId(currentUserId!, contactId),
-                    ).notifier,
-                  )
-                  .state =
-              isOnline;
+          ref.read(isOnlineProvider(contactId).notifier).state = isOnline;
         } catch (e, stack) {
           log(
             'ERROR in _UserChatsState._subscribeToPresence callback: $e\nSTACK: $stack',
@@ -283,31 +287,95 @@ class _UserChatsState extends ConsumerState<UserChats>
             stackTrace: stack,
           );
         }
-      },
-    );
-  }
-
-  void _subscribeToTyping(String chatId) {
-    if (!mounted || currentUserId == null) return;
-    _typingSubscriptions[chatId]?.cancel();
-
-    _typingSubscriptions[chatId] = ChatService.subscribeToTyping(chatId, (
-      response,
-    ) {
-      if (!mounted) return;
-      try {
-        if (response.payload['userId'] != currentUserId) {
-          ref.read(isTypingProvider(chatId).notifier).state =
-              response.payload['isTyping'] ?? false;
-        }
-      } catch (e, stack) {
-        log(
-          'ERROR in _UserChatsState._subscribeToTyping callback: $e\nSTACK: $stack',
-          name: 'DEBUG_SUBSCRIPTION',
-          error: e,
-          stackTrace: stack,
+      });
+      if (sub != null) _presenceSubscriptions.add(sub);
+    } catch (e, stack) {
+      log(
+        'ERROR in _UserChatsState._subscribeToPresence: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unable to connect to presence service. Please check your connection.',
+            ),
+            backgroundColor: Colors.red,
+          ),
         );
       }
+    }
+  }
+
+  void _subscribeToTyping(String contactId) {
+    try {
+      if (!mounted || currentUserId == null) return;
+      // ChatService.subscribeToTyping filters by chatId, not contactId.
+      // Generate the same deterministic chatId used everywhere else.
+      final chatId = ChatService.generateChatId(currentUserId!, contactId);
+      final sub = ChatService.subscribeToTyping(chatId, (response) {
+        if (!mounted) return;
+        try {
+          if (response.payload['userId'] != currentUserId) {
+            ref.read(isTypingProvider(contactId).notifier).state =
+                response.payload['isTyping'] ?? false;
+          }
+        } catch (e, stack) {
+          log(
+            'ERROR in _UserChatsState._subscribeToTyping callback: $e\nSTACK: $stack',
+            name: 'DEBUG_SUBSCRIPTION',
+            error: e,
+            stackTrace: stack,
+          );
+        }
+      });
+      if (sub != null) _typingSubscriptions.add(sub);
+    } catch (e, stack) {
+      log(
+        'ERROR in _UserChatsState._subscribeToTyping: $e\nSTACK: $stack',
+        name: 'DEBUG_SUBSCRIPTION',
+        error: e,
+        stackTrace: stack,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unable to connect to typing service. Please check your connection.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _resubscribeContactStreams(List<dynamic> contacts) {
+    // Cancel and clear existing per-contact subscriptions before re-subscribing
+    for (final sub in _presenceSubscriptions) {
+      sub.cancel();
+    }
+    _presenceSubscriptions.clear();
+    for (final sub in _typingSubscriptions) {
+      sub.cancel();
+    }
+    _typingSubscriptions.clear();
+
+    for (final contact in contacts) {
+      if (!mounted) return;
+      _subscribeToPresence(contact.uid);
+      _subscribeToTyping(contact.uid);
+    }
+  }
+
+  /// Used by _resumeAllSubscriptions when no contacts list is readily
+  /// available — reads the already-cached contact provider value.
+  void _resubscribeContactStreamsFromProvider() {
+    final contactsValue = ref.read(userContactProvider);
+    contactsValue.whenData((contacts) {
+      _resubscribeContactStreams(contacts);
     });
   }
 
@@ -343,9 +411,16 @@ class _UserChatsState extends ConsumerState<UserChats>
         // Pre-load data
         ref.read(lastMessageProvider(contact.uid));
         ref.read(unreadCountProvider(contact.uid));
+        // Manually fetch the contact's current presence from the database.
+        // This is necessary because CheckConnection.build() calls
+        // ChatService.updatePresence(..., online: true) on every page load,
+        // so the realtime subscription alone would miss the initial state
+        // that was already written before the subscription was registered.
+        _fetchAndSetPresence(contact.uid);
+        // Subscribe to per-contact streams
+        _subscribeToPresence(contact.uid);
+        _subscribeToTyping(contact.uid);
       }
-
-      _resubscribeContactStreams(contacts);
     } catch (e) {
       // Continue even if pre-loading fails - data will load on demand
     }
@@ -487,13 +562,8 @@ class _UserChatsState extends ConsumerState<UserChats>
                                   if (userId == null) {
                                     return const SizedBox.shrink();
                                   }
-
-                                  final chatId = ChatService.generateChatId(
-                                    userId,
-                                    contact.uid,
-                                  );
                                   final isOnline = ref.watch(
-                                    isOnlineProvider(chatId),
+                                    isOnlineProvider(contact.uid),
                                   );
 
                                   return Stack(
@@ -594,19 +664,9 @@ class _UserChatsState extends ConsumerState<UserChats>
                                     lastMessageProvider(contact.uid),
                                   );
 
-                                  // Same fix — read directly from Firebase Auth
-                                  final userId =
-                                      FirebaseAuth.instance.currentUser?.uid;
-                                  final isTyping = userId != null
-                                      ? ref.watch(
-                                          isTypingProvider(
-                                            ChatService.generateChatId(
-                                              userId,
-                                              contact.uid,
-                                            ),
-                                          ),
-                                        )
-                                      : false;
+                                  final isTyping = ref.watch(
+                                    isTypingProvider(contact.uid),
+                                  );
 
                                   return lastMessageAsync.when(
                                     data: (lastMessage) => Text(

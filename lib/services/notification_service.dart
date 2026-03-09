@@ -3,8 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:googleapis_auth/auth_io.dart';
@@ -48,20 +46,13 @@ class NotificationService {
     }
 
     try {
-      if (!dotenv.isInitialized) {
-        await dotenv.load(fileName: ".env");
-      }
+      final doc = await FirebaseFirestore.instance
+          .collection('secrets')
+          .doc('link-up-data-987c1')
+          .get();
 
-      // Verify required environment variables
-      final pathToSecret = dotenv.env['PATH_TO_SECRET'];
-      final projectId = dotenv.env['PROJECT_ID'];
-
-      if (pathToSecret == null || pathToSecret.isEmpty) {
-        throw Exception('PATH_TO_SECRET not found in .env file');
-      }
-
-      if (projectId == null || projectId.isEmpty) {
-        throw Exception('PROJECT_ID not found in .env file');
+      if (doc.data() == null) {
+        throw Exception('Service account credentials not found in Firestore');
       }
     } catch (e) {
       rethrow;
@@ -136,30 +127,17 @@ class NotificationService {
 
   Future<AccessCredentials> _getAccessToken() async {
     try {
-      // Ensure dotenv is initialized
-      await _ensureDotenvInitialized();
+      // Fetch service account credentials from Firestore
+      final doc = await FirebaseFirestore.instance
+          .collection('secrets')
+          .doc('link-up-data-987c1')
+          .get();
 
-      final serviceAccountPath = dotenv.env['PATH_TO_SECRET'];
-
-      if (serviceAccountPath == null || serviceAccountPath.isEmpty) {
-        throw Exception('PATH_TO_SECRET not found in environment variables');
+      if (!doc.exists || doc.data() == null) {
+        throw Exception('Service account credentials not found in Firestore');
       }
 
-      String serviceAccountJson;
-      try {
-        serviceAccountJson = await rootBundle.loadString(serviceAccountPath);
-      } catch (e) {
-        throw Exception(
-          'Failed to load service account file: $serviceAccountPath',
-        );
-      }
-
-      Map<String, dynamic> serviceAccountMap;
-      try {
-        serviceAccountMap = jsonDecode(serviceAccountJson);
-      } catch (e) {
-        throw Exception('Invalid service account JSON format');
-      }
+      final serviceAccountMap = doc.data()!;
 
       ServiceAccountCredentials serviceAccount;
       try {
@@ -190,13 +168,20 @@ class NotificationService {
       final credentials = await _getAccessToken();
       final accessToken = credentials.accessToken.data;
 
-      // Ensure dotenv is initialized for PROJECT_ID
-      await _ensureDotenvInitialized();
+      // Get project ID from Firestore credentials
+      final doc = await FirebaseFirestore.instance
+          .collection('secrets')
+          .doc('link-up-data-987c1')
+          .get();
 
-      final projectId = dotenv.env['PROJECT_ID'];
+      if (!doc.exists || doc.data() == null) {
+        throw Exception('Service account credentials not found in Firestore');
+      }
+
+      final projectId = doc.data()!['project_id'] as String?;
 
       if (projectId == null || projectId.isEmpty) {
-        throw Exception('PROJECT_ID not found in environment variables');
+        throw Exception('PROJECT_ID not found in service account credentials');
       }
 
       final Dio dio = Dio();
@@ -253,16 +238,5 @@ class NotificationService {
 
   Future<void> cancelAllNotifications() async {
     await flutterLocalNotificationPlugin.cancelAll();
-  }
-
-  // Helper method to ensure dotenv is initialized
-  Future<void> _ensureDotenvInitialized() async {
-    if (!dotenv.isInitialized) {
-      try {
-        await dotenv.load(fileName: ".env");
-      } catch (e) {
-        throw Exception('Failed to load .env file: $e');
-      }
-    }
   }
 }

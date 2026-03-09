@@ -140,7 +140,7 @@ class NotificationService {
       final data = doc.data()!;
 
       // Handle both string and map formats
-      Map<String, dynamic>? serviceAccountMap;
+      Map<String, dynamic> serviceAccountMap = {};
 
       if (data.containsKey('link-up-data-987c1')) {
         // If stored as a string field, parse it

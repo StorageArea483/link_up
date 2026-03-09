@@ -137,7 +137,21 @@ class NotificationService {
         throw Exception('Service account credentials not found in Firestore');
       }
 
-      final serviceAccountMap = doc.data()!;
+      final data = doc.data()!;
+
+      // Handle both string and map formats
+      Map<String, dynamic>? serviceAccountMap;
+
+      if (data.containsKey('link-up-data-987c1')) {
+        // If stored as a string field, parse it
+        final credentialsString = data['link-up-data-987c1'] as String;
+        try {
+          serviceAccountMap =
+              jsonDecode(credentialsString) as Map<String, dynamic>;
+        } catch (e) {
+          throw Exception('Failed to parse service account JSON string: $e');
+        }
+      }
 
       ServiceAccountCredentials serviceAccount;
       try {
@@ -178,7 +192,23 @@ class NotificationService {
         throw Exception('Service account credentials not found in Firestore');
       }
 
-      final projectId = doc.data()!['project_id'] as String?;
+      final data = doc.data()!;
+      String? projectId;
+
+      if (data.containsKey('link-up-data-987c1')) {
+        // If stored as a string field, parse it
+        final credentialsString = data['link-up-data-987c1'] as String;
+        try {
+          final serviceAccountMap =
+              jsonDecode(credentialsString) as Map<String, dynamic>;
+          projectId = serviceAccountMap['project_id'] as String?;
+        } catch (e) {
+          throw Exception('Failed to parse service account JSON string: $e');
+        }
+      } else {
+        // If stored as direct fields, get project_id directly
+        projectId = data['project_id'] as String?;
+      }
 
       if (projectId == null || projectId.isEmpty) {
         throw Exception('PROJECT_ID not found in service account credentials');

@@ -1,5 +1,6 @@
 import 'dart:developer';
 
+import 'package:device_preview/device_preview.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -48,7 +49,12 @@ void main() async {
 
   FirebaseMessaging.onBackgroundMessage(handleBackgroundMessage);
 
-  runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
+  runApp(
+    DevicePreview(
+      builder: (context) =>
+          UncontrolledProviderScope(container: container, child: const MyApp()),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -57,7 +63,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      useInheritedMediaQuery: true,
+      locale: DevicePreview.locale(context),
+      builder: DevicePreview.appBuilder,
       navigatorKey: notificationService.navigatorKey,
+      theme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
       home: const CheckConnection(child: LandingPage()),
       routes: {
         '/chats': (context) => const CheckConnection(child: UserChats()),

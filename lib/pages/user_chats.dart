@@ -53,6 +53,7 @@ class _UserChatsState extends ConsumerState<UserChats>
     ) {
       if (!mounted) return;
 
+      if (!mounted) return;
       final isOnline = ref.read(networkConnectivityProvider).value ?? true;
       if (!isOnline) {
         return;
@@ -128,6 +129,7 @@ class _UserChatsState extends ConsumerState<UserChats>
     _resumeAllSubscriptions();
 
     try {
+      if (!mounted) return;
       ref.invalidate(userContactProvider);
       final contacts = await ref.read(userContactProvider.future);
       if (!mounted) return;
@@ -163,16 +165,20 @@ class _UserChatsState extends ConsumerState<UserChats>
     // Reset all contact presence providers to offline when network drops.
     // The realtime subscription is paused so no updates will arrive, and
     // the stale online state would remain visible without this reset.
+    if (!mounted) return;
     ref.read(userContactProvider).whenData((contacts) {
       for (final contact in contacts) {
+        if (!mounted) break;
         ref.read(isOnlineProvider(contact.uid).notifier).state = false;
       }
     });
   }
 
   void _resumeAllSubscriptions() {
+    if (!mounted) return;
     ref.read(userContactProvider).whenData((contacts) {
       for (final contact in contacts) {
+        if (!mounted) break;
         _fetchAndSetPresence(contact.uid);
       }
     });
@@ -268,6 +274,7 @@ class _UserChatsState extends ConsumerState<UserChats>
       final doc = await ChatService.getUserPresence(contactId);
       if (!mounted) return;
       final isOnline = doc?.data['online'] ?? false;
+      if (!mounted) return;
       ref.read(isOnlineProvider(contactId).notifier).state = isOnline;
     } catch (e, stack) {
       log(
@@ -327,6 +334,7 @@ class _UserChatsState extends ConsumerState<UserChats>
         if (!mounted) return;
         try {
           if (response.payload['userId'] != currentUserId) {
+            if (!mounted) return;
             ref.read(isTypingProvider(contactId).notifier).state =
                 response.payload['isTyping'] ?? false;
           }
@@ -381,8 +389,10 @@ class _UserChatsState extends ConsumerState<UserChats>
   /// Used by _resumeAllSubscriptions when no contacts list is readily
   /// available — reads the already-cached contact provider value.
   void _resubscribeContactStreamsFromProvider() {
+    if (!mounted) return;
     final contactsValue = ref.read(userContactProvider);
     contactsValue.whenData((contacts) {
+      if (!mounted) return;
       _resubscribeContactStreams(contacts);
     });
   }
@@ -390,12 +400,14 @@ class _UserChatsState extends ConsumerState<UserChats>
   Future<void> _initialize() async {
     if (!mounted) return;
 
+    if (!mounted) return;
     ref.read(navigationProvider.notifier).state = null;
     currentUserId = FirebaseAuth.instance.currentUser?.uid;
     _subscribeToMessages();
 
     // Check connectivity before loading contacts
     try {
+      if (!mounted) return;
       final isOnline = await ref.read(networkConnectivityProvider.future);
       if (!mounted) return;
       if (!isOnline) {
@@ -408,6 +420,7 @@ class _UserChatsState extends ConsumerState<UserChats>
 
     // Load contacts, pre-warm providers and subscribe to streams
     try {
+      if (!mounted) return;
       ref.invalidate(userContactProvider);
       final contacts = await ref.read(userContactProvider.future);
       if (!mounted) return;
@@ -417,7 +430,9 @@ class _UserChatsState extends ConsumerState<UserChats>
         ref.invalidate(lastMessageProvider(contact.uid));
         ref.invalidate(unreadCountProvider(contact.uid));
         // Pre-load data
+        if (!mounted) break;
         ref.read(lastMessageProvider(contact.uid));
+        if (!mounted) break;
         ref.read(unreadCountProvider(contact.uid));
         // Manually fetch the contact's current presence from the database.
         // This is necessary because CheckConnection.build() calls
@@ -446,6 +461,7 @@ class _UserChatsState extends ConsumerState<UserChats>
           _subscribeToMessages();
 
           try {
+            if (!mounted) return;
             ref.invalidate(userContactProvider);
             final contacts = await ref.read(userContactProvider.future);
             if (!mounted) return;
@@ -477,260 +493,308 @@ class _UserChatsState extends ConsumerState<UserChats>
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: AppColors.background,
-          elevation: 0,
-          title: const Text('User Chats', style: AppTextStyles.title),
-          centerTitle: true,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-            onPressed: () => Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) =>
-                    const CheckConnection(child: LandingPage()),
-              ),
-            ),
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isTablet = constraints.maxWidth >= 600;
+              return AppBar(
+                backgroundColor: AppColors.background,
+                elevation: 0,
+                automaticallyImplyLeading: false,
+                flexibleSpace: SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: isTablet ? 640.0 : double.infinity,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                color: AppColors.textPrimary,
+                              ),
+                              onPressed: () =>
+                                  Navigator.of(context).pushReplacement(
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const CheckConnection(
+                                            child: LandingPage(),
+                                          ),
+                                    ),
+                                  ),
+                            ),
+                            const Expanded(
+                              child: Text(
+                                'User Chats',
+                                style: AppTextStyles.title,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            const SizedBox(width: 48),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final horizontalPadding = (constraints.maxWidth >= 600)
-                  ? 32.0
-                  : 20.0;
-              return Consumer(
-                builder: (context, ref, _) {
-                  final contactsAsyncValue = ref.watch(userContactProvider);
-                  return contactsAsyncValue.when(
-                    skipLoadingOnRefresh: false,
-                    skipLoadingOnReload: false,
-                    data: (contacts) {
-                      if (contacts.isEmpty) {
-                        return SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: horizontalPadding,
-                          ),
-                          child: const SizedBox(
-                            height: 600,
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.person_2_outlined,
-                                    size: 100,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                  SizedBox(height: 16),
-                                  Text(
-                                    'No registered contacts found.',
-                                    style: AppTextStyles.subtitle,
-                                  ),
-                                ],
+              final isTablet = constraints.maxWidth >= 600;
+              final maxContentWidth = isTablet ? 640.0 : double.infinity;
+              final horizontalPadding = isTablet ? 32.0 : 20.0;
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxContentWidth),
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final contactsAsyncValue = ref.watch(userContactProvider);
+                      return contactsAsyncValue.when(
+                        skipLoadingOnRefresh: false,
+                        skipLoadingOnReload: false,
+                        data: (contacts) {
+                          if (contacts.isEmpty) {
+                            return SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: horizontalPadding,
                               ),
-                            ),
-                          ),
-                        );
-                      }
-
-                      return ListView.builder(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalPadding,
-                          8,
-                          horizontalPadding,
-                          100,
-                        ),
-                        itemCount: contacts.length,
-                        itemBuilder: (context, index) {
-                          final contact = contacts[index];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: AppColors.white,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              leading: Consumer(
-                                builder: (context, ref, _) {
-                                  final unreadCountAsync = ref.watch(
-                                    unreadCountProvider(contact.uid),
-                                  );
-                                  final int unreadCount =
-                                      unreadCountAsync.value ?? 0;
-
-                                  // Firebase Auth is synchronous — user is guaranteed logged in
-                                  // here because CheckConnection wraps this page
-                                  final userId =
-                                      FirebaseAuth.instance.currentUser?.uid;
-                                  if (userId == null) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  final isOnline = ref.watch(
-                                    isOnlineProvider(contact.uid),
-                                  );
-
-                                  return Stack(
-                                    clipBehavior: Clip.none,
+                              child: const SizedBox(
+                                height: 600,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      CircleAvatar(
-                                        radius: 32,
-                                        backgroundColor: AppColors.primaryBlue
-                                            .withOpacity(0.2),
-                                        child: ClipOval(
-                                          child: Image.network(
-                                            contact.profilePicture,
-                                            width: 64,
-                                            height: 64,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    const Icon(
+                                      Icon(
+                                        Icons.person_2_outlined,
+                                        size: 100,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'No registered contacts found.',
+                                        style: AppTextStyles.subtitle,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+
+                          return ListView.builder(
+                            padding: EdgeInsets.fromLTRB(
+                              horizontalPadding,
+                              8,
+                              horizontalPadding,
+                              100,
+                            ),
+                            itemCount: contacts.length,
+                            itemBuilder: (context, index) {
+                              final contact = contacts[index];
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  leading: Consumer(
+                                    builder: (context, ref, _) {
+                                      final unreadCountAsync = ref.watch(
+                                        unreadCountProvider(contact.uid),
+                                      );
+                                      final int unreadCount =
+                                          unreadCountAsync.value ?? 0;
+
+                                      // Firebase Auth is synchronous — user is guaranteed logged in
+                                      // here because CheckConnection wraps this page
+                                      final userId = FirebaseAuth
+                                          .instance
+                                          .currentUser
+                                          ?.uid;
+                                      if (userId == null) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      final isOnline = ref.watch(
+                                        isOnlineProvider(contact.uid),
+                                      );
+
+                                      return Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 32,
+                                            backgroundColor: AppColors
+                                                .primaryBlue
+                                                .withOpacity(0.2),
+                                            child: ClipOval(
+                                              child: Image.network(
+                                                contact.profilePicture,
+                                                width: 64,
+                                                height: 64,
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) => const Icon(
                                                       Icons.person_2_outlined,
                                                       color:
                                                           AppColors.primaryBlue,
                                                       size: 32,
                                                     ),
-                                            loadingBuilder:
-                                                (
-                                                  context,
-                                                  child,
-                                                  loadingProgress,
-                                                ) {
-                                                  if (loadingProgress == null) {
-                                                    return child;
-                                                  }
-                                                  return const Center(
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          strokeWidth: 2,
-                                                          color: AppColors
-                                                              .primaryBlue,
-                                                        ),
-                                                  );
-                                                },
-                                          ),
-                                        ),
-                                      ),
-
-                                      // Unread badge
-                                      if (unreadCount > 0)
-                                        Positioned(
-                                          top: 0,
-                                          left: 0,
-                                          child: CircleAvatar(
-                                            radius: 12,
-                                            backgroundColor:
-                                                AppColors.primaryBlue,
-                                            child: Text(
-                                              unreadCount.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
+                                                loadingBuilder:
+                                                    (
+                                                      context,
+                                                      child,
+                                                      loadingProgress,
+                                                    ) {
+                                                      if (loadingProgress ==
+                                                          null) {
+                                                        return child;
+                                                      }
+                                                      return const Center(
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                              color: AppColors
+                                                                  .primaryBlue,
+                                                            ),
+                                                      );
+                                                    },
                                               ),
                                             ),
                                           ),
-                                        ),
 
-                                      // Online / offline dot
-                                      Positioned(
-                                        right: 2,
-                                        bottom: 2,
-                                        child: Container(
-                                          width: 14,
-                                          height: 14,
-                                          decoration: BoxDecoration(
-                                            color: isOnline
-                                                ? AppColors.onlineGreen
-                                                : AppColors.offlineGrey,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: AppColors.white,
-                                              width: 2,
+                                          // Unread badge
+                                          if (unreadCount > 0)
+                                            Positioned(
+                                              top: 0,
+                                              left: 0,
+                                              child: CircleAvatar(
+                                                radius: 12,
+                                                backgroundColor:
+                                                    AppColors.primaryBlue,
+                                                child: Text(
+                                                  unreadCount.toString(),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+
+                                          // Online / offline dot
+                                          Positioned(
+                                            right: 2,
+                                            bottom: 2,
+                                            child: Container(
+                                              width: 14,
+                                              height: 14,
+                                              decoration: BoxDecoration(
+                                                color: isOnline
+                                                    ? AppColors.onlineGreen
+                                                    : AppColors.offlineGrey,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: AppColors.white,
+                                                  width: 2,
+                                                ),
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
-                              title: Text(
-                                contact.name,
-                                style: AppTextStyles.button.copyWith(
-                                  fontSize: 18,
-                                ),
-                              ),
-                              subtitle: Consumer(
-                                builder: (context, ref, _) {
-                                  final lastMessageAsync = ref.watch(
-                                    lastMessageProvider(contact.uid),
-                                  );
-
-                                  final isTyping = ref.watch(
-                                    isTypingProvider(contact.uid),
-                                  );
-
-                                  return lastMessageAsync.when(
-                                    data: (lastMessage) => Text(
-                                      isTyping
-                                          ? 'Typing...'
-                                          : lastMessage.isEmpty
-                                          ? 'No messages yet'
-                                          : lastMessage,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTextStyles.subtitle.copyWith(
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    loading: () => Text(
-                                      'Loading...',
-                                      style: AppTextStyles.subtitle.copyWith(
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    error: (_, _) => Text(
-                                      'No messages yet',
-                                      style: AppTextStyles.subtitle.copyWith(
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              trailing: const Icon(
-                                Icons.chevron_right,
-                                color: AppColors.textSecondary,
-                              ),
-                              onTap: () {
-                                Navigator.of(context).pushReplacement(
-                                  MaterialPageRoute(
-                                    builder: (context) => CheckConnection(
-                                      child: ChatScreen(contact: contact),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                  title: Text(
+                                    contact.name,
+                                    style: AppTextStyles.button.copyWith(
+                                      fontSize: 18,
                                     ),
                                   ),
-                                );
-                              },
-                            ),
+                                  subtitle: Consumer(
+                                    builder: (context, ref, _) {
+                                      final lastMessageAsync = ref.watch(
+                                        lastMessageProvider(contact.uid),
+                                      );
+
+                                      final isTyping = ref.watch(
+                                        isTypingProvider(contact.uid),
+                                      );
+
+                                      return lastMessageAsync.when(
+                                        data: (lastMessage) => Text(
+                                          isTyping
+                                              ? 'Typing...'
+                                              : lastMessage.isEmpty
+                                              ? 'No messages yet'
+                                              : lastMessage,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTextStyles.subtitle
+                                              .copyWith(fontSize: 14),
+                                        ),
+                                        loading: () => Text(
+                                          'Loading...',
+                                          style: AppTextStyles.subtitle
+                                              .copyWith(fontSize: 14),
+                                        ),
+                                        error: (_, _) => Text(
+                                          'No messages yet',
+                                          style: AppTextStyles.subtitle
+                                              .copyWith(fontSize: 14),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  trailing: const Icon(
+                                    Icons.chevron_right,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  onTap: () {
+                                    Navigator.of(context).pushReplacement(
+                                      MaterialPageRoute(
+                                        builder: (context) => CheckConnection(
+                                          child: ChatScreen(contact: contact),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              );
+                            },
                           );
                         },
+                        loading: () => const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primaryBlue,
+                          ),
+                        ),
+                        error: (err, stack) =>
+                            AppErrorWidget(provider: userContactProvider),
                       );
                     },
-                    loading: () => const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primaryBlue,
-                      ),
-                    ),
-                    error: (err, stack) =>
-                        AppErrorWidget(provider: userContactProvider),
-                  );
-                },
+                  ),
+                ),
               );
             },
           ),

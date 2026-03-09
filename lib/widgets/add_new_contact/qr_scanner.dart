@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/providers/loading_provider.dart';
 import 'package:link_up/styles/styles.dart';
+import 'package:link_up/widgets/check_connection.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 class QrScanner extends ConsumerStatefulWidget {
@@ -27,11 +28,13 @@ class _QrScannerState extends ConsumerState<QrScanner> {
     if (scannedData == null) return;
 
     if (!mounted) return;
+    if (!mounted) return;
     ref.read(isLoadingProvider.notifier).state = true;
 
     try {
       // Check if the scanned data is in the correct format
       if (!scannedData.startsWith('LINKUP:')) {
+        if (!mounted) return;
         if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
@@ -50,6 +53,7 @@ class _QrScannerState extends ConsumerState<QrScanner> {
 
       // Check if trying to add yourself
       if (scannedUserId == currentUser!.uid) {
+        if (!mounted) return;
         if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
@@ -71,6 +75,7 @@ class _QrScannerState extends ConsumerState<QrScanner> {
       if (!mounted) return;
 
       if (!scannedUserDoc.exists) {
+        if (!mounted) return;
         if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
@@ -97,6 +102,7 @@ class _QrScannerState extends ConsumerState<QrScanner> {
 
       if (existingContact.exists) {
         if (!mounted) return;
+        if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -107,7 +113,9 @@ class _QrScannerState extends ConsumerState<QrScanner> {
         );
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const LandingPage()),
+          MaterialPageRoute(
+            builder: (context) => const CheckConnection(child: LandingPage()),
+          ),
         );
         return;
       }
@@ -148,6 +156,7 @@ class _QrScannerState extends ConsumerState<QrScanner> {
           });
 
       if (!mounted) return;
+      if (!mounted) return;
       ref.read(isLoadingProvider.notifier).state = false;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -159,9 +168,12 @@ class _QrScannerState extends ConsumerState<QrScanner> {
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const LandingPage()),
+        MaterialPageRoute(
+          builder: (context) => const CheckConnection(child: LandingPage()),
+        ),
       );
     } catch (e) {
+      if (!mounted) return;
       if (!mounted) return;
       ref.read(isLoadingProvider.notifier).state = false;
       if (!mounted) return;
@@ -178,67 +190,121 @@ class _QrScannerState extends ConsumerState<QrScanner> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const LandingPage()),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const CheckConnection(child: LandingPage()),
           ),
-        ),
+        );
+      },
+      child: Scaffold(
         backgroundColor: AppColors.background,
-        title: Text(
-          'Scan QR Code',
-          style: AppTextStyles.title.copyWith(fontSize: 20),
-        ),
-        centerTitle: true,
-      ),
-      body: Stack(
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: (capture) {
-              final List<Barcode> barcodes = capture.barcodes;
-              if (barcodes.isNotEmpty) {
-                final String? code = barcodes.first.rawValue;
-                _handleQrCode(code);
-              }
-            },
-          ),
-          Consumer(
-            builder: (context, ref, _) {
-              return ref.watch(isLoadingProvider)
-                  ? Container(
-                      color: Colors.black54,
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.primaryBlue,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isTablet = constraints.maxWidth >= 600;
+              return AppBar(
+                backgroundColor: AppColors.background,
+                elevation: 0,
+                automaticallyImplyLeading:
+                    false, // ← removes Android back button
+                flexibleSpace: SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: isTablet ? 640.0 : double.infinity,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                              ),
+                              onPressed: () =>
+                                  Navigator.of(context).pushReplacement(
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const CheckConnection(
+                                            child: LandingPage(),
+                                          ),
+                                    ),
+                                  ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                'Scan QR Code',
+                                style: AppTextStyles.title.copyWith(
+                                  fontSize: 20,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            const SizedBox(
+                              width: 48,
+                            ), // balances the back button
+                          ],
                         ),
                       ),
-                    )
-                  : Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        child: Text(
-                          'Point camera at QR code',
-                          style: AppTextStyles.subtitle.copyWith(
-                            color: Colors.white,
-                            fontSize: 14,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        body: Stack(
+          children: [
+            MobileScanner(
+              controller: _controller,
+              onDetect: (capture) {
+                final List<Barcode> barcodes = capture.barcodes;
+                if (barcodes.isNotEmpty) {
+                  final String? code = barcodes.first.rawValue;
+                  _handleQrCode(code);
+                }
+              },
+            ),
+            Consumer(
+              builder: (context, ref, _) {
+                return ref.watch(isLoadingProvider)
+                    ? Container(
+                        color: Colors.black54,
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primaryBlue,
                           ),
                         ),
-                      ),
-                    );
-            },
-          ),
-        ],
+                      )
+                    : Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: Text(
+                            'Point camera at QR code',
+                            style: AppTextStyles.subtitle.copyWith(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:link_up/global/action_circle_button.dart';
 import 'package:link_up/widgets/call_storage/call_screen.dart';
 import 'package:link_up/pages/incoming_call_screen.dart';
 import 'package:link_up/pages/landing_page.dart';
@@ -119,6 +120,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage>
 
   Future<void> _initialize() async {
     if (!mounted) return;
+    if (!mounted) return;
     ref.read(navigationProvider.notifier).state = null;
 
     currentUserId = FirebaseAuth.instance.currentUser?.uid;
@@ -225,6 +227,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage>
     }
     _presenceSubscriptions.clear();
 
+    if (!mounted) return;
     ref.read(userContactProvider).whenData((contacts) {
       for (final contact in contacts) {
         if (!mounted) return;
@@ -279,387 +282,417 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage>
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: AppColors.background,
-          elevation: 0,
-          title: Text(
-            'Meetings Page',
-            style: AppTextStyles.title.copyWith(fontSize: 20),
-          ),
-          centerTitle: true,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-            onPressed: () => Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) =>
-                    const CheckConnection(child: LandingPage()),
-              ),
-            ),
-            tooltip: 'Back to Landing Page',
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isTablet = constraints.maxWidth >= 600;
+              return AppBar(
+                backgroundColor: AppColors.background,
+                elevation: 0,
+                automaticallyImplyLeading: false,
+                flexibleSpace: SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: isTablet ? 640.0 : double.infinity,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                color: AppColors.textPrimary,
+                              ),
+                              onPressed: () =>
+                                  Navigator.of(context).pushReplacement(
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const CheckConnection(
+                                            child: LandingPage(),
+                                          ),
+                                    ),
+                                  ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                'Meetings Page',
+                                style: AppTextStyles.title.copyWith(
+                                  fontSize: 20,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            const SizedBox(width: 48),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final horizontalPadding = (constraints.maxWidth >= 600)
-                  ? 32.0
-                  : 20.0;
+              final isTablet = constraints.maxWidth >= 600;
+              final maxContentWidth = isTablet ? 640.0 : double.infinity;
+              final horizontalPadding = isTablet ? 32.0 : 20.0;
 
-              return Column(
-                children: [
-                  Consumer(
-                    builder: (context, ref, _) {
-                      final isChanged = ref.watch(
-                        meetingsProvider.select((state) => state.isChanged),
-                      );
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxContentWidth),
+                  child: Column(
+                    children: [
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final isChanged = ref.watch(
+                            meetingsProvider.select((state) => state.isChanged),
+                          );
 
-                      return Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalPadding,
-                          12,
-                          horizontalPadding,
-                          8,
-                        ),
-                        child: TextField(
-                          controller: _searchController,
-                          keyboardType: isChanged
-                              ? TextInputType.text
-                              : TextInputType.phone,
-                          decoration: InputDecoration(
-                            hintText: 'Search name or number...',
-                            hintStyle: AppTextStyles.subtitle.copyWith(
-                              color: AppColors.textFooter,
+                          return Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              horizontalPadding,
+                              12,
+                              horizontalPadding,
+                              8,
                             ),
-                            prefixIcon: const Icon(
-                              Icons.search,
-                              color: AppColors.textFooter,
-                            ),
-                            suffixIcon: IconButton(
-                              icon: isChanged
-                                  ? const Icon(
-                                      Icons.filter_list,
-                                      color: AppColors.textPrimary,
-                                    )
-                                  : const Icon(
-                                      Icons.filter_list_off,
-                                      color: AppColors.textSecondary,
-                                    ),
-                              onPressed: () => ref
-                                  .read(meetingsProvider.notifier)
-                                  .toggleChanged(),
-                            ),
-                            filled: true,
-                            fillColor: AppColors.surface,
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 14,
-                              horizontal: 16,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(18),
-                              borderSide: const BorderSide(
-                                color: AppColors.inputBorder,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(18),
-                              borderSide: const BorderSide(
-                                color: AppColors.linkBlue,
-                                width: 1.5,
-                              ),
-                            ),
-                          ),
-                          cursorColor: AppColors.linkBlue,
-                          style: AppTextStyles.button.copyWith(fontSize: 16),
-                          onChanged: (value) {
-                            if (mounted) {
-                              ref.read(meetingsProvider.notifier).search(value);
-                            }
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                  Expanded(
-                    child: Consumer(
-                      builder: (context, ref, _) {
-                        final contactsAsyncValue = ref.watch(
-                          userContactProvider,
-                        );
-                        final searchValue = ref.watch(
-                          meetingsProvider.select((state) => state.value),
-                        );
-
-                        return contactsAsyncValue.when(
-                          skipLoadingOnRefresh: false,
-                          skipLoadingOnReload: false,
-                          data: (contacts) {
-                            var filteredContacts = contacts;
-                            if (contacts.isEmpty && searchValue.isEmpty) {
-                              return const SingleChildScrollView(
-                                physics: AlwaysScrollableScrollPhysics(),
-                                child: SizedBox(
-                                  height: 600,
-                                  child: Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.person_2_outlined,
-                                          size: 100,
+                            child: TextField(
+                              controller: _searchController,
+                              keyboardType: isChanged
+                                  ? TextInputType.text
+                                  : TextInputType.phone,
+                              decoration: InputDecoration(
+                                hintText: 'Search name or number...',
+                                hintStyle: AppTextStyles.subtitle.copyWith(
+                                  color: AppColors.textFooter,
+                                ),
+                                prefixIcon: const Icon(
+                                  Icons.search,
+                                  color: AppColors.textFooter,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: isChanged
+                                      ? const Icon(
+                                          Icons.filter_list,
                                           color: AppColors.textPrimary,
+                                        )
+                                      : const Icon(
+                                          Icons.filter_list_off,
+                                          color: AppColors.textSecondary,
                                         ),
-                                        SizedBox(height: 16),
-                                        Text(
-                                          'No registered contacts found.',
-                                          style: AppTextStyles.subtitle,
-                                        ),
-                                      ],
-                                    ),
+                                  onPressed: () {
+                                    if (!mounted) return;
+                                    ref
+                                        .read(meetingsProvider.notifier)
+                                        .toggleChanged();
+                                  },
+                                ),
+                                filled: true,
+                                fillColor: AppColors.surface,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                  horizontal: 16,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.inputBorder,
                                   ),
                                 ),
-                              );
-                            }
-                            if (searchValue.isNotEmpty) {
-                              filteredContacts = contacts.where((contact) {
-                                final nameMatch = contact.name
-                                    .toLowerCase()
-                                    .contains(searchValue.toLowerCase());
-                                final phoneMatch = contact.phoneNumber.contains(
-                                  searchValue,
-                                );
-                                return nameMatch || phoneMatch;
-                              }).toList();
-                            }
-
-                            if (filteredContacts.isEmpty) {
-                              return const SingleChildScrollView(
-                                physics: AlwaysScrollableScrollPhysics(),
-                                child: SizedBox(
-                                  height: 600,
-                                  child: Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.search_off,
-                                          size: 100,
-                                          color: AppColors.textPrimary,
-                                        ),
-                                        SizedBox(height: 16),
-                                        Text(
-                                          'No contacts match your search.',
-                                          style: AppTextStyles.subtitle,
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.linkBlue,
+                                    width: 1.5,
                                   ),
                                 ),
-                              );
-                            }
-
-                            return ListView.builder(
-                              padding: EdgeInsets.fromLTRB(
-                                horizontalPadding,
-                                8,
-                                horizontalPadding,
-                                100,
                               ),
-                              itemCount: filteredContacts.length,
-                              itemBuilder: (context, index) {
-                                final contact = filteredContacts[index];
-                                final hasProfilePicture = contact.profilePicture
-                                    .trim()
-                                    .isNotEmpty;
-                                final userId =
-                                    FirebaseAuth.instance.currentUser?.uid;
-                                if (userId == null) {
-                                  return const SizedBox.shrink();
+                              cursorColor: AppColors.linkBlue,
+                              style: AppTextStyles.button.copyWith(
+                                fontSize: 16,
+                              ),
+                              onChanged: (value) {
+                                if (mounted) {
+                                  ref
+                                      .read(meetingsProvider.notifier)
+                                      .search(value);
                                 }
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                      Expanded(
+                        child: Consumer(
+                          builder: (context, ref, _) {
+                            final contactsAsyncValue = ref.watch(
+                              userContactProvider,
+                            );
+                            final searchValue = ref.watch(
+                              meetingsProvider.select((state) => state.value),
+                            );
+
+                            return contactsAsyncValue.when(
+                              skipLoadingOnRefresh: false,
+                              skipLoadingOnReload: false,
+                              data: (contacts) {
+                                var filteredContacts = contacts;
+                                if (contacts.isEmpty && searchValue.isEmpty) {
+                                  return const SingleChildScrollView(
+                                    physics: AlwaysScrollableScrollPhysics(),
+                                    child: SizedBox(
+                                      height: 600,
+                                      child: Center(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.person_2_outlined,
+                                              size: 100,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                            SizedBox(height: 16),
+                                            Text(
+                                              'No registered contacts found.',
+                                              style: AppTextStyles.subtitle,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
-                                    leading: CircleAvatar(
-                                      radius: 32,
-                                      backgroundColor: AppColors.primaryBlue
-                                          .withOpacity(0.2),
-                                      child: hasProfilePicture
-                                          ? ClipOval(
-                                              child: Image.network(
-                                                contact.profilePicture,
-                                                width: 64,
-                                                height: 64,
-                                                fit: BoxFit.cover,
-                                                errorBuilder:
-                                                    (
-                                                      context,
-                                                      error,
-                                                      stackTrace,
-                                                    ) {
-                                                      return const Icon(
-                                                        Icons.person_2_outlined,
-                                                        color: AppColors
-                                                            .primaryBlue,
-                                                        size: 32,
-                                                      );
-                                                    },
-                                                loadingBuilder:
-                                                    (
-                                                      context,
-                                                      child,
-                                                      loadingProgress,
-                                                    ) {
-                                                      if (loadingProgress ==
-                                                          null) {
-                                                        return child;
-                                                      }
-                                                      return const Center(
-                                                        child:
-                                                            CircularProgressIndicator(
+                                  );
+                                }
+                                if (searchValue.isNotEmpty) {
+                                  filteredContacts = contacts.where((contact) {
+                                    final nameMatch = contact.name
+                                        .toLowerCase()
+                                        .contains(searchValue.toLowerCase());
+                                    final phoneMatch = contact.phoneNumber
+                                        .contains(searchValue);
+                                    return nameMatch || phoneMatch;
+                                  }).toList();
+                                }
+
+                                if (filteredContacts.isEmpty) {
+                                  return const SingleChildScrollView(
+                                    physics: AlwaysScrollableScrollPhysics(),
+                                    child: SizedBox(
+                                      height: 600,
+                                      child: Center(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.search_off,
+                                              size: 100,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                            SizedBox(height: 16),
+                                            Text(
+                                              'No contacts match your search.',
+                                              style: AppTextStyles.subtitle,
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                return ListView.builder(
+                                  padding: EdgeInsets.fromLTRB(
+                                    horizontalPadding,
+                                    8,
+                                    horizontalPadding,
+                                    100,
+                                  ),
+                                  itemCount: filteredContacts.length,
+                                  itemBuilder: (context, index) {
+                                    final contact = filteredContacts[index];
+                                    final hasProfilePicture = contact
+                                        .profilePicture
+                                        .trim()
+                                        .isNotEmpty;
+                                    final userId =
+                                        FirebaseAuth.instance.currentUser?.uid;
+                                    if (userId == null) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: ListTile(
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 8,
+                                            ),
+                                        leading: CircleAvatar(
+                                          radius: 32,
+                                          backgroundColor: AppColors.primaryBlue
+                                              .withOpacity(0.2),
+                                          child: hasProfilePicture
+                                              ? ClipOval(
+                                                  child: Image.network(
+                                                    contact.profilePicture,
+                                                    width: 64,
+                                                    height: 64,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder:
+                                                        (
+                                                          context,
+                                                          error,
+                                                          stackTrace,
+                                                        ) {
+                                                          return const Icon(
+                                                            Icons
+                                                                .person_2_outlined,
+                                                            color: AppColors
+                                                                .primaryBlue,
+                                                            size: 32,
+                                                          );
+                                                        },
+                                                    loadingBuilder:
+                                                        (
+                                                          context,
+                                                          child,
+                                                          loadingProgress,
+                                                        ) {
+                                                          if (loadingProgress ==
+                                                              null) {
+                                                            return child;
+                                                          }
+                                                          return const Center(
+                                                            child: CircularProgressIndicator(
                                                               strokeWidth: 2,
                                                               color: AppColors
                                                                   .primaryBlue,
                                                             ),
-                                                      );
-                                                    },
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.person_2_outlined,
-                                              color: AppColors.primaryBlue,
-                                              size: 32,
+                                                          );
+                                                        },
+                                                  ),
+                                                )
+                                              : const Icon(
+                                                  Icons.person_2_outlined,
+                                                  color: AppColors.primaryBlue,
+                                                  size: 32,
+                                                ),
+                                        ),
+                                        title: Text(
+                                          contact.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTextStyles.button.copyWith(
+                                            fontSize: 18,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          contact.phoneNumber,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTextStyles.subtitle,
+                                        ),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            ActionCircleButton(
+                                              icon: Icons.call_rounded,
+                                              onPressed: () {
+                                                // Read by contact.uid — consistent
+                                                // with how the provider is keyed.
+                                                if (!mounted) return;
+                                                final isOnline = ref.read(
+                                                  isOnlineProvider(contact.uid),
+                                                );
+                                                Navigator.of(context).push(
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        CheckConnection(
+                                                          child: CallScreen(
+                                                            calleeId:
+                                                                contact.uid,
+                                                            calleeName:
+                                                                contact.name,
+                                                            callerProfilePicture:
+                                                                contact
+                                                                    .profilePicture,
+                                                            isVideo: false,
+                                                            isCaller: true,
+                                                            isOnline: isOnline,
+                                                          ),
+                                                        ),
+                                                  ),
+                                                );
+                                              },
                                             ),
-                                    ),
-                                    title: Text(
-                                      contact.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTextStyles.button.copyWith(
-                                        fontSize: 18,
+                                            const SizedBox(width: 10),
+                                            ActionCircleButton(
+                                              icon: Icons.videocam_rounded,
+                                              onPressed: () {
+                                                if (!mounted) return;
+                                                final isOnline = ref.read(
+                                                  isOnlineProvider(contact.uid),
+                                                );
+                                                Navigator.of(context).push(
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        CheckConnection(
+                                                          child: CallScreen(
+                                                            calleeId:
+                                                                contact.uid,
+                                                            calleeName:
+                                                                contact.name,
+                                                            callerProfilePicture:
+                                                                contact
+                                                                    .profilePicture,
+                                                            isVideo: true,
+                                                            isCaller: true,
+                                                            isOnline: isOnline,
+                                                          ),
+                                                        ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    subtitle: Text(
-                                      contact.phoneNumber,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTextStyles.subtitle,
-                                    ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _ActionCircleButton(
-                                          icon: Icons.call_rounded,
-                                          onPressed: () {
-                                            // Read by contact.uid — consistent
-                                            // with how the provider is keyed.
-                                            final isOnline = ref.read(
-                                              isOnlineProvider(contact.uid),
-                                            );
-                                            Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    CheckConnection(
-                                                      child: CallScreen(
-                                                        calleeId: contact.uid,
-                                                        calleeName:
-                                                            contact.name,
-                                                        callerProfilePicture:
-                                                            contact
-                                                                .profilePicture,
-                                                        isVideo: false,
-                                                        isCaller: true,
-                                                        isOnline: isOnline,
-                                                      ),
-                                                    ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                        const SizedBox(width: 10),
-                                        _ActionCircleButton(
-                                          icon: Icons.videocam_rounded,
-                                          onPressed: () {
-                                            final isOnline = ref.read(
-                                              isOnlineProvider(contact.uid),
-                                            );
-                                            Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    CheckConnection(
-                                                      child: CallScreen(
-                                                        calleeId: contact.uid,
-                                                        calleeName:
-                                                            contact.name,
-                                                        callerProfilePicture:
-                                                            contact
-                                                                .profilePicture,
-                                                        isVideo: true,
-                                                        isCaller: true,
-                                                        isOnline: isOnline,
-                                                      ),
-                                                    ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                    );
+                                  },
                                 );
                               },
+                              loading: () => const Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primaryBlue,
+                                ),
+                              ),
+                              error: (err, stack) =>
+                                  AppErrorWidget(provider: userContactProvider),
                             );
                           },
-                          loading: () => const Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.primaryBlue,
-                            ),
-                          ),
-                          error: (err, stack) =>
-                              AppErrorWidget(provider: userContactProvider),
-                        );
-                      },
-                    ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               );
             },
           ),
         ),
         bottomNavigationBar: const BottomNavbar(currentIndex: 1),
-      ),
-    );
-  }
-}
-
-class _ActionCircleButton extends StatelessWidget {
-  const _ActionCircleButton({required this.icon, required this.onPressed});
-
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
-      onTap: onPressed,
-      child: Container(
-        height: 44,
-        width: 44,
-        decoration: const BoxDecoration(
-          color: AppColors.iconBackground,
-          shape: BoxShape.circle,
-        ),
-        child: Center(child: Icon(icon, color: AppColors.linkBlue)),
       ),
     );
   }

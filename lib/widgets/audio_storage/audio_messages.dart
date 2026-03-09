@@ -653,6 +653,7 @@ class AudioRecordingButton extends ConsumerWidget {
       onPressed: () async {
         if (currentUserId == null) return;
 
+        if (!context.mounted) return;
         final isRecording = ref.read(toggleRecordingProvider);
         if (!isRecording) {
           await handler.startRecording(currentUserId!);

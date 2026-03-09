@@ -40,7 +40,9 @@ class BottomNavbar extends StatelessWidget {
         if (index == currentIndex) return;
         if (index == 0) {
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const LandingPage()),
+            MaterialPageRoute(
+              builder: (context) => const CheckConnection(child: LandingPage()),
+            ),
           );
         } else if (index == 1) {
           Navigator.of(context).pushReplacement(
@@ -55,7 +57,7 @@ class BottomNavbar extends StatelessWidget {
               builder: (context) => const CheckConnection(child: UserChats()),
             ),
           );
-        } else {}
+        }
       },
     );
   }

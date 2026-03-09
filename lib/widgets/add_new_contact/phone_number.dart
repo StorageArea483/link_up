@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/providers/loading_provider.dart';
 import 'package:link_up/styles/styles.dart';
+import 'package:link_up/widgets/check_connection.dart';
 
 class PhoneNumber extends ConsumerStatefulWidget {
   const PhoneNumber({super.key});
@@ -28,12 +29,14 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
   Future<void> _submit() async {
     if (_formKey.currentState!.validate()) {
       if (!mounted) return;
+      if (!mounted) return;
       ref.read(isLoadingProvider.notifier).state = true;
       final phoneNumber = _numberController.text;
       final contactName = _nameController.text;
       final currentUser = FirebaseAuth.instance.currentUser;
 
       if (currentUser == null) {
+        if (!mounted) return;
         if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
@@ -65,6 +68,7 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
           // Check if trying to add yourself
           if (foundUserId == currentUser.uid) {
             if (!mounted) return;
+            if (!mounted) return;
             ref.read(isLoadingProvider.notifier).state = false;
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -87,6 +91,7 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
           if (!mounted) return;
 
           if (existingContact.exists) {
+            if (!mounted) return;
             if (!mounted) return;
             ref.read(isLoadingProvider.notifier).state = false;
             if (!mounted) return;
@@ -135,6 +140,7 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
               });
 
           if (!mounted) return;
+          if (!mounted) return;
           ref.read(isLoadingProvider.notifier).state = false;
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -149,10 +155,13 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
           _nameController.clear();
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const LandingPage()),
+            MaterialPageRoute(
+              builder: (context) => const CheckConnection(child: LandingPage()),
+            ),
           );
         } else {
           // User does not exist
+          if (!mounted) return;
           if (!mounted) return;
           ref.read(isLoadingProvider.notifier).state = false;
           if (!mounted) return;
@@ -164,6 +173,7 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
           );
         }
       } catch (e) {
+        if (!mounted) return;
         if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
@@ -179,102 +189,170 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const LandingPage()),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const CheckConnection(child: LandingPage()),
           ),
-        ),
+        );
+      },
+      child: Scaffold(
         backgroundColor: AppColors.background,
-        title: Text(
-          'Add New Contact',
-          style: AppTextStyles.title.copyWith(fontSize: 20),
-        ),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildFieldLabel('LinkUp Number'),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _numberController,
-                  keyboardType: TextInputType.phone,
-                  style: AppTextStyles.subtitle.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  decoration: _buildInputDecoration(
-                    hint: 'Enter 9 digit number',
-                    icon: Icons.copy_all_rounded,
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Number cannot be left empty';
-                    }
-                    if (!RegExp(r'^\d{9}$').hasMatch(value)) {
-                      return 'Number must be exactly 9 digits';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                _buildFieldLabel('Contact Name'),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _nameController,
-                  style: AppTextStyles.subtitle.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  decoration: _buildInputDecoration(
-                    hint: 'Enter contact name',
-                    icon: Icons.person_outline_rounded,
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Contact Name cannot be left empty';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 48),
-                ElevatedButton(
-                  onPressed: _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryBlue,
-                    foregroundColor: AppColors.white,
-                    padding: const EdgeInsets.all(16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isTablet = constraints.maxWidth >= 600;
+              return AppBar(
+                backgroundColor: AppColors.background,
+                elevation: 0,
+                automaticallyImplyLeading: false,
+                flexibleSpace: SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: isTablet ? 640.0 : double.infinity,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                              ),
+                              onPressed: () =>
+                                  Navigator.of(context).pushReplacement(
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const CheckConnection(
+                                            child: LandingPage(),
+                                          ),
+                                    ),
+                                  ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                'Add New Contact',
+                                style: AppTextStyles.title.copyWith(
+                                  fontSize: 20,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            // Invisible spacer to keep title truly centered
+                            const SizedBox(width: 48),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  child: Consumer(
-                    builder: (context, ref, _) {
-                      return ref.watch(isLoadingProvider)
-                          ? const CircularProgressIndicator(
-                              color: AppColors.white,
-                            )
-                          : const Text(
-                              'Send Request',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                ),
+              );
+            },
+          ),
+        ),
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isTablet = constraints.maxWidth >= 600;
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: isTablet ? 640.0 : double.infinity,
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 30,
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildFieldLabel('LinkUp Number'),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _numberController,
+                            keyboardType: TextInputType.phone,
+                            style: AppTextStyles.subtitle.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            decoration: _buildInputDecoration(
+                              hint: 'Enter 9 digit number',
+                              icon: Icons.copy_all_rounded,
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Number cannot be left empty';
+                              }
+                              if (!RegExp(r'^\d{9}$').hasMatch(value)) {
+                                return 'Number must be exactly 9 digits';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 24),
+                          _buildFieldLabel('Contact Name'),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _nameController,
+                            style: AppTextStyles.subtitle.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            decoration: _buildInputDecoration(
+                              hint: 'Enter contact name',
+                              icon: Icons.person_outline_rounded,
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Contact Name cannot be left empty';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 48),
+                          ElevatedButton(
+                            onPressed: _submit,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryBlue,
+                              foregroundColor: AppColors.white,
+                              padding: const EdgeInsets.all(16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                            );
-                    },
+                            ),
+                            child: Consumer(
+                              builder: (context, ref, _) {
+                                return ref.watch(isLoadingProvider)
+                                    ? const CircularProgressIndicator(
+                                        color: AppColors.white,
+                                      )
+                                    : const Text(
+                                        'Send Request',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),

@@ -112,8 +112,10 @@ class ImageMessagesHandler {
 
           // Update providers with the local io.File
           final localImageFile = io.File(savePath);
+          if (!context.mounted) return false;
           ref.read(localFileProvider((file.$id, chatId)).notifier).state =
               localImageFile;
+          if (!context.mounted) return false;
           ref
                   .read(imageLoadingStateProvider((file.$id, chatId)).notifier)
                   .state =
@@ -147,6 +149,7 @@ class ImageMessagesHandler {
         if (!context.mounted) return false;
         final currentMessages = ref.read(messagesProvider(chatId));
 
+        if (!context.mounted) return false;
         ref.read(messagesProvider(chatId).notifier).state = [
           newMessage,
           ...currentMessages,

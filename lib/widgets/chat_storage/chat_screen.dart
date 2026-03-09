@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:link_up/global/action_circle_button.dart';
 import 'package:link_up/models/message.dart';
 import 'package:link_up/models/user_contacts.dart';
 import 'package:link_up/pages/incoming_call_screen.dart';
@@ -17,6 +18,7 @@ import 'package:link_up/services/call_service.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/pages/user_chats.dart';
+import 'package:link_up/widgets/call_storage/call_screen.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'package:link_up/database/sqflite_helper.dart';
 import 'package:link_up/widgets/images_storage/image_bubble.dart';
@@ -100,6 +102,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     player.positionStream.listen((p) {
       if (mounted) {
         if (!_audioHandler.shouldBlockUpdates) {
+          if (!mounted) return;
           ref.read(positionProvider.notifier).state = p;
         }
       }
@@ -107,6 +110,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     player.durationStream.listen((d) {
       if (mounted && d != null) {
         if (!_audioHandler.shouldBlockUpdates) {
+          if (!mounted) return;
           ref.read(durationProvider.notifier).state = d;
         }
       }
@@ -299,6 +303,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _initializeChat() async {
     try {
       if (mounted) {
+        if (!mounted) return;
         ref.read(navigationProvider.notifier).state = 'chat';
       }
       if (!mounted) return;
@@ -322,9 +327,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       ref.read(chatIdProvider.notifier).state = chatId;
 
       // Check if we already have messages for this chat
+      if (!mounted) return;
       final cachedMessages = ref.read(messagesProvider(chatId));
       // Only show loading if we don't have cached messages
       if (cachedMessages.isEmpty && mounted) {
+        if (!mounted) return;
         ref.read(isLoadingChatScreenProvider.notifier).state = true;
       } else {
         if (!mounted) return;
@@ -416,6 +423,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         ref.read(messagesProvider(chatId).notifier).state = updatedMessagesList;
       } else if (mounted) {
         // No new delivered messages, but ensure we have offline messages loaded
+        if (!mounted) return;
         final currentMessages = ref.read(messagesProvider(chatId));
         if (currentMessages.isEmpty) {
           try {
@@ -432,8 +440,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     } catch (e) {
       // On error, ensure we still have offline messages if current list is empty
       if (mounted) {
+        if (!mounted) return;
         final chatId = ref.read(chatIdProvider);
         if (chatId != null) {
+          if (!mounted) return;
           final currentMessages = ref.read(messagesProvider(chatId));
           if (currentMessages.isEmpty) {
             try {
@@ -479,7 +489,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           // Merge and update
           final allMessages = _mergeMessages(sentMessages, offlineMessages);
           if (mounted) {
+            if (!mounted) return false;
             ref.read(messagesProvider(chatId).notifier).state = allMessages;
+            if (!mounted) return false;
             ref.read(isLoadingChatScreenProvider.notifier).state = false;
           }
         }
@@ -503,7 +515,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (!isOnline && offlineMessages.isNotEmpty) {
         // Offline but has SQLite messages
         if (mounted) {
+          if (!mounted) return false;
           ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+          if (!mounted) return false;
           ref.read(isLoadingChatScreenProvider.notifier).state = false;
         }
         return true;
@@ -526,7 +540,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           }
         }
         if (mounted) {
+          if (!mounted) return false;
           ref.read(messagesProvider(chatId).notifier).state = allMessages;
+          if (!mounted) return false;
           ref.read(isLoadingChatScreenProvider.notifier).state = false;
         }
         return true;
@@ -542,11 +558,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             chatId,
           );
           if (mounted) {
+            if (!mounted) return false;
             ref.read(messagesProvider(chatId).notifier).state = offlineMessages;
+            if (!mounted) return false;
             ref.read(isLoadingChatScreenProvider.notifier).state = false;
           }
         } catch (e) {
           if (mounted) {
+            if (!mounted) return false;
             ref.read(isLoadingChatScreenProvider.notifier).state = false;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -609,6 +628,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ref.read(messagesProvider(chatId).notifier).state = updatedMessages;
 
             if (newMessage.status == 'delivered') {
+              if (!mounted) return; // Added
               _handleDeliveredMessage(newMessage);
             }
           } else {
@@ -637,6 +657,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             }
 
             if (newMessage.status == 'delivered') {
+              if (!mounted) return;
               _handleDeliveredMessage(newMessage);
             }
           }
@@ -1205,6 +1226,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         final newMessage = Message.fromJson(
           fullData,
         ); // message with status sent gets added in appwrite db
+        if (!mounted) return;
         final currentMessages = ref.read(messagesProvider(chatId));
         if (!mounted) return;
         ref.read(messagesProvider(chatId).notifier).state = [
@@ -1474,6 +1496,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
         if (!mounted) return;
         ref.read(isOnlineProvider(_chatId!).notifier).state = true;
+        if (!mounted) return;
         final chatId = ref.read(chatIdProvider);
         if (chatId != null) {
           try {
@@ -1650,6 +1673,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       // Only load from SQLite if we have no messages at all
       if (!mounted) return;
       final chatId = ref.read(chatIdProvider);
+      if (!mounted) return;
       final currentMessages = ref.read(messagesProvider(chatId ?? ''));
 
       if (chatId != null && currentMessages.isEmpty && mounted) {
@@ -1671,136 +1695,211 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   // Build header with contact info
   Widget _buildHeader() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Network status banner (only shown when sender is offline)
-        Consumer(
-          builder: (context, ref, _) {
-            final networkOnlineAsync = ref.watch(networkConnectivityProvider);
-            final networkOnline = networkOnlineAsync.value ?? true;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth >= 600;
+        final maxWidth = isTablet ? 640.0 : double.infinity;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Network status banner (only shown when sender is offline)
+            Consumer(
+              builder: (context, ref, _) {
+                final networkOnlineAsync = ref.watch(
+                  networkConnectivityProvider,
+                );
+                final networkOnline = networkOnlineAsync.value ?? true;
 
-            if (!networkOnline) {
-              return Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 8,
-                  horizontal: 16,
-                ),
-                color: Colors.orange,
-                child: const Text(
-                  'No internet connection - Messages cannot be sent',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          },
-        ),
-        // Chat header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.primaryBlue.withOpacity(0.1),
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(
-                  Icons.arrow_back,
-                  color: AppColors.textPrimary,
-                ),
-                onPressed: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        const CheckConnection(child: UserChats()),
-                  ),
-                ),
-              ),
-              CircleAvatar(
-                radius: 20,
-                child: ClipOval(
-                  child: Image.network(
-                    widget.contact.profilePicture,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.person_2_outlined,
-                        color: AppColors.primaryBlue,
-                        size: 24,
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.contact.name,
-                      style: AppTextStyles.button.copyWith(fontSize: 16),
+                if (!networkOnline) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 16,
                     ),
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final chatId = ref.watch(chatIdProvider) ?? _chatId;
-                        if (chatId == null) {
-                          return const SizedBox.shrink();
-                        }
-
-                        final isTyping = ref.watch(isTypingProvider(chatId));
-                        final isContactOnline = ref.watch(
-                          isOnlineProvider(chatId),
-                        );
-
-                        // Show only online/offline status or typing indicator
-                        return Text(
-                          isTyping
-                              ? 'typing...'
-                              : isContactOnline
-                              ? 'Online'
-                              : 'Offline',
-                          style: TextStyle(
-                            color: isTyping
-                                ? AppColors.primaryBlue
-                                : isContactOnline
-                                ? Colors.green
-                                : AppColors.textFooter,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        );
-                      },
+                    color: Colors.orange,
+                    child: const Text(
+                      'No internet connection - Messages cannot be sent',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.more_vert, color: AppColors.textPrimary),
-                onPressed: () {
-                  final chatId = ref.read(chatIdProvider);
-                  final msgsClear = SqfliteMsgsClear(
-                    chatId: chatId,
-                    contactUid: widget.contact.uid,
-                    ref: ref,
-                    context: context,
                   );
-                  msgsClear.showChatOptionsMenu();
-                },
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+            // Chat header
+            Align(
+              alignment: Alignment.center,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBlue.withOpacity(0.1),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: AppColors.textPrimary,
+                        ),
+                        onPressed: () => Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const CheckConnection(child: UserChats()),
+                          ),
+                        ),
+                      ),
+                      CircleAvatar(
+                        radius: 20,
+                        child: ClipOval(
+                          child: Image.network(
+                            widget.contact.profilePicture,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.person_2_outlined,
+                                color: AppColors.primaryBlue,
+                                size: 24,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.contact.name,
+                              style: AppTextStyles.button.copyWith(
+                                fontSize: 16,
+                              ),
+                            ),
+                            Consumer(
+                              builder: (context, ref, _) {
+                                final chatId =
+                                    ref.watch(chatIdProvider) ?? _chatId;
+                                if (chatId == null) {
+                                  return const SizedBox.shrink();
+                                }
+
+                                final isTyping = ref.watch(
+                                  isTypingProvider(chatId),
+                                );
+                                final isContactOnline = ref.watch(
+                                  isOnlineProvider(chatId),
+                                );
+
+                                // Show only online/offline status or typing indicator
+                                return Text(
+                                  isTyping
+                                      ? 'typing...'
+                                      : isContactOnline
+                                      ? 'Online'
+                                      : 'Offline',
+                                  style: TextStyle(
+                                    color: isTyping
+                                        ? AppColors.primaryBlue
+                                        : isContactOnline
+                                        ? Colors.green
+                                        : AppColors.textFooter,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      ActionCircleButton(
+                        icon: Icons.call_rounded,
+                        onPressed: () {
+                          if (!mounted) return;
+                          final isOnline = ref.read(
+                            isOnlineProvider(widget.contact.uid),
+                          );
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => CheckConnection(
+                                child: CallScreen(
+                                  calleeId: widget.contact.uid,
+                                  calleeName: widget.contact.name,
+                                  callerProfilePicture:
+                                      widget.contact.profilePicture,
+                                  isVideo: false,
+                                  isCaller: true,
+                                  isOnline: isOnline,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 10),
+                      ActionCircleButton(
+                        icon: Icons.videocam_rounded,
+                        onPressed: () {
+                          if (!mounted) return;
+                          final isOnline = ref.read(
+                            isOnlineProvider(widget.contact.uid),
+                          );
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => CheckConnection(
+                                child: CallScreen(
+                                  calleeId: widget.contact.uid,
+                                  calleeName: widget.contact.name,
+                                  callerProfilePicture:
+                                      widget.contact.profilePicture,
+                                  isVideo: true,
+                                  isCaller: true,
+                                  isOnline: isOnline,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.more_vert,
+                          color: AppColors.textPrimary,
+                        ),
+                        onPressed: () {
+                          if (!mounted) return;
+                          final chatId = ref.read(chatIdProvider);
+                          final msgsClear = SqfliteMsgsClear(
+                            chatId: chatId,
+                            contactUid: widget.contact.uid,
+                            ref: ref,
+                            context: context,
+                          );
+                          msgsClear.showChatOptionsMenu();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1856,14 +1955,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       );
     }
 
-    return ListView.builder(
-      reverse: true,
-      padding: const EdgeInsets.all(16),
-      itemCount: messages.length,
-      itemBuilder: (context, index) {
-        final message = messages[index];
-        final isSentByMe = message.isSentByMe(currentUserId);
-        return _buildMessageBubble(message, isSentByMe);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth >= 600;
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: isTablet ? 640 : double.infinity,
+            ),
+            child: ListView.builder(
+              reverse: true,
+              padding: const EdgeInsets.all(16),
+              itemCount: messages.length,
+              itemBuilder: (context, index) {
+                final message = messages[index];
+                final isSentByMe = message.isSentByMe(currentUserId);
+                return _buildMessageBubble(message, isSentByMe);
+              },
+            ),
+          ),
+        );
       },
     );
   }
@@ -1925,8 +2037,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           final updated = currentMessages
               .where((m) => m.id != message.id)
               .toList();
+          if (!mounted) return;
           ref.read(messagesProvider(chatId).notifier).state = updated;
           // Refresh last message for contact list
+          if (!mounted) return;
           ref.invalidate(lastMessageProvider(widget.contact.uid));
           if (mounted) {
             Navigator.pop(context);
@@ -1999,7 +2113,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           final updated = currentMessages
               .where((m) => m.id != message.id)
               .toList();
+          if (!mounted) return;
           ref.read(messagesProvider(chatId).notifier).state = updated;
+          if (!mounted) return;
           ref.invalidate(lastMessageProvider(widget.contact.uid));
           if (mounted) {
             Navigator.of(context).pop();
@@ -2042,202 +2158,229 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Widget _buildMessageBubble(Message message, bool isSentByMe) {
-    return Align(
-      alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _buildOptionsMenu(message),
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.7,
-            ),
-            decoration: BoxDecoration(
-              color: isSentByMe ? AppColors.primaryBlue : AppColors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(isSentByMe ? 16 : 4),
-                bottomRight: Radius.circular(isSentByMe ? 4 : 16),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth >= 600;
+        // On tablet use 70% of 640, on mobile 70% of screen width
+        final bubbleMaxWidth = isTablet
+            ? 640.0 * 0.7
+            : MediaQuery.of(context).size.width * 0.7;
+        return Align(
+          alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _buildOptionsMenu(message),
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
                 ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (message.imageId != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: ImageBubble(
-                      imageId: message.imageId!,
-                      chatId:
-                          _chatId ??
-                          (_currentUserId != null
-                              ? ChatService.generateChatId(
-                                  _currentUserId!,
-                                  widget.contact.uid,
-                                )
-                              : null),
-                    ),
-                  )
-                else if (message.audioId != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: AudioBubble(
-                      audioId: message.audioId!,
-                      isSentByMe: isSentByMe,
-                      chatId:
-                          _chatId ??
-                          (_currentUserId != null
-                              ? ChatService.generateChatId(
-                                  _currentUserId!,
-                                  widget.contact.uid,
-                                )
-                              : null),
-                    ),
+                constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
+                decoration: BoxDecoration(
+                  color: isSentByMe ? AppColors.primaryBlue : AppColors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(16),
+                    topRight: const Radius.circular(16),
+                    bottomLeft: Radius.circular(isSentByMe ? 16 : 4),
+                    bottomRight: Radius.circular(isSentByMe ? 4 : 16),
                   ),
-                if (message.text.isNotEmpty &&
-                    (message.imageId == null || message.text != 'Image') &&
-                    (message.audioId == null || message.text != 'Audio'))
-                  Text(
-                    message.text,
-                    style: TextStyle(
-                      color: isSentByMe ? Colors.white : AppColors.textPrimary,
-                      fontSize: 14,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
-                  ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _formatTime(message.createdAt),
-                      style: TextStyle(
-                        color: isSentByMe
-                            ? Colors.white.withOpacity(0.7)
-                            : AppColors.textFooter,
-                        fontSize: 10,
-                      ),
-                    ),
-                    if (isSentByMe) ...[
-                      const SizedBox(width: 4),
-                      Icon(
-                        message.status == 'read'
-                            ? Icons.done_all
-                            : message.status == 'delivered'
-                            ? Icons.done_all
-                            : Icons.done,
-                        size: 14,
-                        color: message.status == 'read'
-                            ? Colors.blue[200]
-                            : Colors.white.withOpacity(0.7),
-                      ),
-                    ],
                   ],
                 ),
-              ],
-            ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (message.imageId != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: ImageBubble(
+                          imageId: message.imageId!,
+                          chatId:
+                              _chatId ??
+                              (_currentUserId != null
+                                  ? ChatService.generateChatId(
+                                      _currentUserId!,
+                                      widget.contact.uid,
+                                    )
+                                  : null),
+                        ),
+                      )
+                    else if (message.audioId != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: AudioBubble(
+                          audioId: message.audioId!,
+                          isSentByMe: isSentByMe,
+                          chatId:
+                              _chatId ??
+                              (_currentUserId != null
+                                  ? ChatService.generateChatId(
+                                      _currentUserId!,
+                                      widget.contact.uid,
+                                    )
+                                  : null),
+                        ),
+                      ),
+                    if (message.text.isNotEmpty &&
+                        (message.imageId == null || message.text != 'Image') &&
+                        (message.audioId == null || message.text != 'Audio'))
+                      Text(
+                        message.text,
+                        style: TextStyle(
+                          color: isSentByMe
+                              ? Colors.white
+                              : AppColors.textPrimary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _formatTime(message.createdAt),
+                          style: TextStyle(
+                            color: isSentByMe
+                                ? Colors.white.withOpacity(0.7)
+                                : AppColors.textFooter,
+                            fontSize: 10,
+                          ),
+                        ),
+                        if (isSentByMe) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            message.status == 'read'
+                                ? Icons.done_all
+                                : message.status == 'delivered'
+                                ? Icons.done_all
+                                : Icons.done,
+                            size: 14,
+                            color: message.status == 'read'
+                                ? Colors.blue[200]
+                                : Colors.white.withOpacity(0.7),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   Widget _buildInputSection() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
-      decoration: const BoxDecoration(color: AppColors.white),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Audio preview widget
-          AudioPreviewWidget(handler: _audioHandler),
-          // Input Row
-          Row(
-            children: [
-              // Image input buttons
-              ImageInputButtons(contact: widget.contact),
-              // Audio recording button
-              AudioRecordingButton(
-                currentUserId: _currentUserId,
-                handler: _audioHandler,
-              ),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: AppColors.primaryBlue.withOpacity(0.1),
-                    ),
-                  ),
-                  child: Consumer(
-                    builder: (context, ref, _) {
-                      final toggleRecording = ref.watch(
-                        toggleRecordingProvider,
-                      );
-                      final recordingPath = ref.watch(recordingPathProvider);
-                      return TextField(
-                        controller: _messageController,
-                        onChanged: _onTypingChanged,
-                        decoration: InputDecoration(
-                          hintText: toggleRecording
-                              ? 'Recording...'
-                              : recordingPath != null
-                              ? 'Voice message ready'
-                              : 'Type a message...',
-                          border: InputBorder.none,
-                          hintStyle: AppTextStyles.footer,
-                        ),
-                        maxLines: null,
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Consumer(
-                builder: (context, ref, _) {
-                  return CircleAvatar(
-                    backgroundColor: AppColors.primaryBlue,
-                    radius: 24,
-                    child: ref.watch(isLoadingChatScreenProvider)
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: AppColors.white,
-                                strokeWidth: 2,
-                              ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth >= 600;
+        return Align(
+          alignment: Alignment.center,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: isTablet ? 640.0 : double.infinity,
+            ),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
+              decoration: const BoxDecoration(color: AppColors.white),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Audio preview widget
+                  AudioPreviewWidget(handler: _audioHandler),
+                  // Input Row
+                  Row(
+                    children: [
+                      // Image input buttons
+                      ImageInputButtons(contact: widget.contact),
+                      // Audio recording button
+                      AudioRecordingButton(
+                        currentUserId: _currentUserId,
+                        handler: _audioHandler,
+                      ),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: AppColors.primaryBlue.withOpacity(0.1),
                             ),
-                          )
-                        : IconButton(
-                            icon: const Icon(
-                              Icons.send_rounded,
-                              color: AppColors.white,
-                              size: 20,
-                            ),
-                            onPressed: _sendMessage,
                           ),
-                  );
-                },
+                          child: Consumer(
+                            builder: (context, ref, _) {
+                              final toggleRecording = ref.watch(
+                                toggleRecordingProvider,
+                              );
+                              final recordingPath = ref.watch(
+                                recordingPathProvider,
+                              );
+                              return TextField(
+                                controller: _messageController,
+                                onChanged: _onTypingChanged,
+                                decoration: InputDecoration(
+                                  hintText: toggleRecording
+                                      ? 'Recording...'
+                                      : recordingPath != null
+                                      ? 'Voice message ready'
+                                      : 'Type a message...',
+                                  border: InputBorder.none,
+                                  hintStyle: AppTextStyles.footer,
+                                ),
+                                maxLines: null,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Consumer(
+                        builder: (context, ref, _) {
+                          return CircleAvatar(
+                            backgroundColor: AppColors.primaryBlue,
+                            radius: 24,
+                            child: ref.watch(isLoadingChatScreenProvider)
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: Center(
+                                      child: CircularProgressIndicator(
+                                        color: AppColors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  )
+                                : IconButton(
+                                    icon: const Icon(
+                                      Icons.send_rounded,
+                                      color: AppColors.white,
+                                      size: 20,
+                                    ),
+                                    onPressed: _sendMessage,
+                                  ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

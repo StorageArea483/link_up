@@ -41,11 +41,7 @@ build/
 coverage/
 .metadata
 
-# =========================
-# Firebase / Secrets (DO NOT COMMIT)
-# =========================
-android/app/google-services.json
-ios/Runner/GoogleService-Info.plist
+
 
 # =========================
 # Appwrite

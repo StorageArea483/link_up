@@ -31,9 +31,6 @@ void main() async {
     log('Firebase initialization failed: $e', name: 'Main');
   }
 
-  // Load environment variables
-  // await dotenv.load(fileName: ".env"); // Removed - using Firestore for credentials
-
   // Create a ProviderContainer to access providers in main()
   final container = ProviderContainer();
 

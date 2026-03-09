@@ -46,7 +46,6 @@ coverage/
 # =========================
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
-.env
 
 # =========================
 # Appwrite
@@ -65,6 +64,3 @@ app.*.map.json
 android/app/debug/
 android/app/profile/
 android/app/release/
-
-*.env
-secrets/link-up-data-987c1-4687688fe13e.json

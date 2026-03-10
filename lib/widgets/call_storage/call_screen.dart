@@ -163,7 +163,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   Future<void> _initCall() async {
     if (mounted) {
-      if (!mounted) return;
       ref.read(navigationProvider.notifier).state = null;
     }
     // 1. Init renderers
@@ -260,7 +259,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         // "Connected" on both the caller and callee side immediately, without
         // waiting for onTrack to fire.
         if (mounted) {
-          if (!mounted) return;
           ref.read(callProvider.notifier).isConnected = true;
         }
         // Start the call duration timer now that P2P is confirmed established.
@@ -489,7 +487,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     if (_isHangingUp) return;
     _isHangingUp = true;
     if (!mounted) return;
-    if (!mounted) return;
     ref.read(loadingProvider.notifier).state = true;
 
     try {
@@ -508,10 +505,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   void _cleanupAndPop() {
     if (!_isHangingUp) {
       _isHangingUp = true;
-      if (mounted) {
-        if (!mounted) return;
-        ref.read(loadingProvider.notifier).state = true;
-      }
+      if (mounted) ref.read(loadingProvider.notifier).state = true;
     }
 
     _callDurationTimer?.cancel();
@@ -586,7 +580,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
         final enabled = !audioTracks[0].enabled;
         audioTracks[0].enabled = enabled;
         if (!mounted) return;
-        if (!mounted) return;
         ref.read(callProvider.notifier).isMuted = !enabled;
       }
     } catch (e) {
@@ -598,7 +591,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     try {
       _isSpeaker = !_isSpeaker;
       await Helper.setSpeakerphoneOn(_isSpeaker);
-      if (!mounted) return;
       if (!mounted) return;
       ref.read(callProvider.notifier).isSpeaker = _isSpeaker;
     } catch (e) {
@@ -612,7 +604,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       if (videoTracks != null && videoTracks.isNotEmpty) {
         final enabled = !videoTracks[0].enabled;
         videoTracks[0].enabled = enabled;
-        if (!mounted) return;
         if (!mounted) return;
         ref.read(callProvider.notifier).isCameraOff = !enabled;
       }
@@ -643,7 +634,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     if (_callDurationTimer != null) return; // already running
     _callDurationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
-        if (!mounted) return;
         ref.read(callDurationProvider.notifier).state++;
       }
     });

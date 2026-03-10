@@ -3,7 +3,7 @@ import 'dart:developer';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-// import 'package:flutter_dotenv/flutter_dotenv.dart'; // Removed - using Firestore for credentials
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/pages/user_chats.dart';
@@ -30,6 +30,9 @@ void main() async {
     // Firebase initialization failure is critical - lo g for debugging
     log('Firebase initialization failed: $e', name: 'Main');
   }
+
+  // Load environment variables
+  await dotenv.load(fileName: ".env");
 
   // Create a ProviderContainer to access providers in main()
   final container = ProviderContainer();

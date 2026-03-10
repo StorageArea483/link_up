@@ -488,6 +488,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               .toList();
           // Merge and update
           final allMessages = _mergeMessages(sentMessages, offlineMessages);
+
+          // Background refresh: ensure delivered messages on server are processed
+          for (final msg in sentMessages) {
+            if (msg.status == 'delivered') {
+              _handleDeliveredMessage(msg);
+            }
+          }
+
           if (mounted) {
             if (!mounted) return false;
             ref.read(messagesProvider(chatId).notifier).state = allMessages;
@@ -526,17 +534,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       final docs = await ChatService.getMessages(chatId);
       if (mounted) {
         final sentMessages = docs.documents
-            .map((doc) => Message.fromJson(doc.data))
+            .map((doc) => Message.fromJson({'\$id': doc.$id, ...doc.data}))
             .toList();
 
         final allMessages = _mergeMessages(sentMessages, offlineMessages);
 
-        // Save all fetched messages to SQLite for persistence
+        // Process fetched messages from Appwrite
         for (final msg in sentMessages) {
+          // Always save to SQLite for persistence
           try {
             await SqfliteHelper.insertMessage(msg);
           } catch (e) {
-            // Continue with other messages even if one fails
+            // Silent failure
+          }
+
+          // Deletion and cleanup if delivered
+          if (msg.status == 'delivered') {
+            await _handleDeliveredMessage(msg);
           }
         }
         if (mounted) {
@@ -712,6 +726,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         // Handle audio messages
         if (message.audioId != null) {
           await _handleAudioDelivery(message);
+        }
+
+        // Handle plain text messages (delete from Appwrite after delivery)
+        if (message.imageId == null && message.audioId == null) {
+          try {
+            await ChatService.deleteMessageFromAppwrite(message.id);
+          } catch (e) {
+            // Silent cleanup failure
+          }
         }
       }
     } catch (e) {
@@ -1617,26 +1640,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
           // Process messages from Appwrite
           for (final newMsg in newMessagesList) {
-            // Save to SQLite for local persistence
+            // Standard cleanup: save to SQLite and delete from Appwrite if delivered
             try {
-              await SqfliteHelper.insertMessage(newMsg);
+              if (newMsg.status == 'delivered') {
+                await _handleDeliveredMessage(newMsg);
+              } else {
+                // If not delivered yet, just save to SQLite for now
+                await SqfliteHelper.insertMessage(newMsg);
+              }
             } catch (e) {
               log(
-                'Failed to save message to SQLite during reload: $e',
+                'Failed to process message during reload: $e',
                 name: 'ChatScreen',
               );
-            }
-
-            // If it's a delivered message, clean up from Appwrite
-            if (newMsg.status == 'delivered') {
-              try {
-                await ChatService.deleteMessageFromAppwrite(newMsg.id);
-              } catch (e) {
-                log(
-                  'Failed to delete delivered message from Appwrite: $e',
-                  name: 'ChatScreen',
-                );
-              }
             }
           }
 

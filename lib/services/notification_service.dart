@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:googleapis_auth/auth_io.dart';
@@ -46,13 +48,20 @@ class NotificationService {
     }
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('secrets')
-          .doc('link-up-data-987c1')
-          .get();
+      if (!dotenv.isInitialized) {
+        await dotenv.load(fileName: ".env");
+      }
 
-      if (doc.data() == null) {
-        throw Exception('Service account credentials not found in Firestore');
+      // Verify required environment variables
+      final pathToSecret = dotenv.env['PATH_TO_SECRET'];
+      final projectId = dotenv.env['PROJECT_ID'];
+
+      if (pathToSecret == null || pathToSecret.isEmpty) {
+        throw Exception('PATH_TO_SECRET not found in .env file');
+      }
+
+      if (projectId == null || projectId.isEmpty) {
+        throw Exception('PROJECT_ID not found in .env file');
       }
     } catch (e) {
       rethrow;
@@ -127,30 +136,29 @@ class NotificationService {
 
   Future<AccessCredentials> _getAccessToken() async {
     try {
-      // Fetch service account credentials from Firestore
-      final doc = await FirebaseFirestore.instance
-          .collection('secrets')
-          .doc('link-up-data-987c1')
-          .get();
+      // Ensure dotenv is initialized
+      await _ensureDotenvInitialized();
 
-      if (!doc.exists || doc.data() == null) {
-        throw Exception('Service account credentials not found in Firestore');
+      final serviceAccountPath = dotenv.env['PATH_TO_SECRET'];
+
+      if (serviceAccountPath == null || serviceAccountPath.isEmpty) {
+        throw Exception('PATH_TO_SECRET not found in environment variables');
       }
 
-      final data = doc.data()!;
+      String serviceAccountJson;
+      try {
+        serviceAccountJson = await rootBundle.loadString(serviceAccountPath);
+      } catch (e) {
+        throw Exception(
+          'Failed to load service account file: $serviceAccountPath',
+        );
+      }
 
-      // Handle both string and map formats
-      Map<String, dynamic> serviceAccountMap = {};
-
-      if (data.containsKey('link-up-data-987c1')) {
-        // If stored as a string field, parse it
-        final credentialsString = data['link-up-data-987c1'] as String;
-        try {
-          serviceAccountMap =
-              jsonDecode(credentialsString) as Map<String, dynamic>;
-        } catch (e) {
-          throw Exception('Failed to parse service account JSON string: $e');
-        }
+      Map<String, dynamic> serviceAccountMap;
+      try {
+        serviceAccountMap = jsonDecode(serviceAccountJson);
+      } catch (e) {
+        throw Exception('Invalid service account JSON format');
       }
 
       ServiceAccountCredentials serviceAccount;
@@ -182,36 +190,13 @@ class NotificationService {
       final credentials = await _getAccessToken();
       final accessToken = credentials.accessToken.data;
 
-      // Get project ID from Firestore credentials
-      final doc = await FirebaseFirestore.instance
-          .collection('secrets')
-          .doc('link-up-data-987c1')
-          .get();
+      // Ensure dotenv is initialized for PROJECT_ID
+      await _ensureDotenvInitialized();
 
-      if (!doc.exists || doc.data() == null) {
-        throw Exception('Service account credentials not found in Firestore');
-      }
-
-      final data = doc.data()!;
-      String? projectId;
-
-      if (data.containsKey('link-up-data-987c1')) {
-        // If stored as a string field, parse it
-        final credentialsString = data['link-up-data-987c1'] as String;
-        try {
-          final serviceAccountMap =
-              jsonDecode(credentialsString) as Map<String, dynamic>;
-          projectId = serviceAccountMap['project_id'] as String?;
-        } catch (e) {
-          throw Exception('Failed to parse service account JSON string: $e');
-        }
-      } else {
-        // If stored as direct fields, get project_id directly
-        projectId = data['project_id'] as String?;
-      }
+      final projectId = dotenv.env['PROJECT_ID'];
 
       if (projectId == null || projectId.isEmpty) {
-        throw Exception('PROJECT_ID not found in service account credentials');
+        throw Exception('PROJECT_ID not found in environment variables');
       }
 
       final Dio dio = Dio();
@@ -268,5 +253,16 @@ class NotificationService {
 
   Future<void> cancelAllNotifications() async {
     await flutterLocalNotificationPlugin.cancelAll();
+  }
+
+  // Helper method to ensure dotenv is initialized
+  Future<void> _ensureDotenvInitialized() async {
+    if (!dotenv.isInitialized) {
+      try {
+        await dotenv.load(fileName: ".env");
+      } catch (e) {
+        throw Exception('Failed to load .env file: $e');
+      }
+    }
   }
 }

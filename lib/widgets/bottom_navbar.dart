@@ -3,7 +3,6 @@ import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/pages/meetings_page.dart';
 import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/pages/user_profile.dart';
-import 'package:link_up/providers/user_contacts_provider.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

@@ -91,29 +91,7 @@ class _QrScannerState extends ConsumerState<QrScanner> {
 
       final scannedUserData = scannedUserDoc.data()!;
 
-      // Check if contact already exists
-      final existingContact = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .collection('contacts')
-          .doc(scannedUserId)
-          .get();
-
       if (!mounted) return;
-
-      if (existingContact.exists) {
-        if (!mounted) return;
-        if (!mounted) return;
-        ref.read(isLoadingProvider.notifier).state = false;
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => const CheckConnection(child: LandingPage()),
-          ),
-        );
-        return;
-      }
-
       // Add the scanned user to current user's contacts
       await FirebaseFirestore.instance
           .collection('users')

@@ -10,11 +10,11 @@ import 'package:link_up/providers/random_num_provider.dart';
 import 'package:link_up/providers/call_log_provider.dart';
 import 'package:link_up/services/call_service.dart';
 import 'package:link_up/styles/styles.dart';
-import 'package:link_up/widgets/add_new_contact/qr_code.dart';
-import 'package:link_up/widgets/add_new_contact/qr_scanner.dart';
+import 'package:link_up/widgets/contact_details/qr_code.dart';
+import 'package:link_up/widgets/contact_details/qr_scanner.dart';
 import 'package:link_up/widgets/app_error_widget.dart';
 import 'package:link_up/widgets/bottom_navbar.dart';
-import 'package:link_up/widgets/add_new_contact/phone_number.dart';
+import 'package:link_up/widgets/contact_details/phone_number.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:link_up/providers/user_contacts_provider.dart';
@@ -888,18 +888,20 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                     return ElevatedButton(
                       onPressed: () async {
                         if (!context.mounted) return;
-                        ref.read(isLoadingProvider.notifier).state = true;
+                        ref.read(editingContactProvider.notifier).state = true;
                         final newName = nameController.text.trim();
                         if (newName.isEmpty) {
                           if (!context.mounted) return;
-                          ref.read(isLoadingProvider.notifier).state = false;
+                          ref.read(editingContactProvider.notifier).state =
+                              false;
                           return;
                         }
 
                         final currentUser = FirebaseAuth.instance.currentUser;
                         if (currentUser == null) {
                           if (!context.mounted) return;
-                          ref.read(isLoadingProvider.notifier).state = false;
+                          ref.read(editingContactProvider.notifier).state =
+                              false;
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -930,7 +932,8 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                                 .update({'contact name': newName});
 
                             if (!context.mounted) return;
-                            ref.read(isLoadingProvider.notifier).state = false;
+                            ref.read(editingContactProvider.notifier).state =
+                                false;
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -943,7 +946,8 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                             ref.invalidate(userContactProvider);
                           } else {
                             if (!context.mounted) return;
-                            ref.read(isLoadingProvider.notifier).state = false;
+                            ref.read(editingContactProvider.notifier).state =
+                                false;
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -954,7 +958,8 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                           }
                         } catch (e) {
                           if (!context.mounted) return;
-                          ref.read(isLoadingProvider.notifier).state = false;
+                          ref.read(editingContactProvider.notifier).state =
+                              false;
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -972,7 +977,7 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      child: ref.watch(isLoadingProvider)
+                      child: ref.watch(editingContactProvider)
                           ? const Center(
                               child: CircularProgressIndicator(
                                 color: AppColors.primaryBlue,
@@ -980,6 +985,115 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                             )
                           : const Text(
                               'Save Changes',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 15),
+                Consumer(
+                  builder: (context, ref, _) {
+                    return ElevatedButton(
+                      onPressed: () async {
+                        if (!context.mounted) return;
+                        ref.read(deletingContactProvider.notifier).state = true;
+                        final currentUser = FirebaseAuth.instance.currentUser;
+                        if (currentUser == null) {
+                          if (!context.mounted) return;
+                          ref.read(deletingContactProvider.notifier).state =
+                              false;
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('User not logged in'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        try {
+                          // Check if the contact user exists in the database
+                          final contactUserDoc = await FirebaseFirestore
+                              .instance
+                              .collection('users')
+                              .doc(contact.uid)
+                              .get();
+
+                          if (!context.mounted) return;
+
+                          if (contactUserDoc.exists) {
+                            // fetch the contact doc in the current user's contacts subcollection
+                            final contactDoc = await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(currentUser.uid)
+                                .collection('contacts')
+                                .doc(contact.uid)
+                                .get();
+
+                            if (contactDoc.exists) {
+                              await contactDoc.reference.delete();
+                            } else {
+                              contactUserDoc.reference.delete();
+                            }
+
+                            if (!context.mounted) return;
+                            ref.read(deletingContactProvider.notifier).state =
+                                false;
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Contact deleted successfully'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            if (!context.mounted) return;
+                            Navigator.pop(context);
+                            ref.invalidate(userContactProvider);
+                          } else {
+                            if (!context.mounted) return;
+                            ref.read(deletingContactProvider.notifier).state =
+                                false;
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Contact user does not exist'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ref.read(deletingContactProvider.notifier).state =
+                              false;
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Error updating contact'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.linkBlue,
+                        foregroundColor: AppColors.white,
+                        padding: const EdgeInsets.all(16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: ref.watch(deletingContactProvider)
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                color: AppColors.primaryBlue,
+                              ),
+                            )
+                          : const Text(
+                              'Delete Contact',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,

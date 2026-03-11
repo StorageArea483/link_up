@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/providers/loading_provider.dart';
+import 'package:link_up/providers/user_contacts_provider.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/check_connection.dart';
 
@@ -153,6 +154,7 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
           // Clear fields and go back
           _numberController.clear();
           _nameController.clear();
+          ref.invalidate(userContactProvider);
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
@@ -291,9 +293,10 @@ class _PhoneNumberState extends ConsumerState<PhoneNumber> {
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Number cannot be left empty';
+                                return null;
                               }
-                              if (!RegExp(r'^\d{9}$').hasMatch(value)) {
+                              if (!RegExp(r'^\d{9}$').hasMatch(value) &&
+                                  value.isNotEmpty) {
                                 return 'Number must be exactly 9 digits';
                               }
                               return null;

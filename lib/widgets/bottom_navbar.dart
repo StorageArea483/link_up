@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:link_up/pages/landing_page.dart';
 import 'package:link_up/pages/meetings_page.dart';
 import 'package:link_up/pages/user_chats.dart';
+import 'package:link_up/pages/user_profile.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/check_connection.dart';
 
@@ -35,6 +36,11 @@ class BottomNavbar extends StatelessWidget {
           activeIcon: Icon(Icons.chat_bubble_rounded),
           label: 'Chats',
         ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_outline_rounded),
+          activeIcon: Icon(Icons.person_rounded),
+          label: 'Profile',
+        ),
       ],
       onTap: (index) {
         if (index == currentIndex) return;
@@ -55,6 +61,12 @@ class BottomNavbar extends StatelessWidget {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (context) => const CheckConnection(child: UserChats()),
+            ),
+          );
+        } else {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const CheckConnection(child: UserProfile()),
             ),
           );
         }

@@ -611,14 +611,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       messageSubscription = ChatService.subscribeToMessages(chatId, (response) {
         if (_isTearingDown || !mounted) return;
         try {
-          // Skip Appwrite DELETE events entirely.
-          // When _handleDeliveredMessage deletes the document from Appwrite
-          // after delivery, a delete realtime event fires back into this same
-          // subscription. The delete payload still carries the old document
-          // data, which causes the message to be "updated" again in the UI and
-          // _handleDeliveredMessage to be called a second time — triggering a
-          // duplicate delete attempt and a UI flicker. Checking the event type
-          // here breaks that loop.
           final isDeleteEvent = response.events.any(
             (e) => e.contains('.delete'),
           );
@@ -760,18 +752,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (await localImageFile.exists()) {
         // Image already exists, update provider and cleanup cloud storage
         if (mounted) {
-          ref
-                  .read(localFileProvider((message.imageId!, _chatId)).notifier)
-                  .state =
+          ref.read(localFileProvider(message.imageId!).notifier).state =
               localImageFile;
-          ref
-                  .read(
-                    imageLoadingStateProvider((
-                      message.imageId!,
-                      _chatId,
-                    )).notifier,
-                  )
-                  .state =
+          ref.read(imageLoadingStateProvider(message.imageId!).notifier).state =
               false;
         }
 
@@ -798,14 +781,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       } catch (e) {
         // Set loading to false on download error
         if (mounted) {
-          ref
-                  .read(
-                    imageLoadingStateProvider((
-                      message.imageId!,
-                      _chatId,
-                    )).notifier,
-                  )
-                  .state =
+          ref.read(imageLoadingStateProvider(message.imageId!).notifier).state =
               false;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -821,18 +797,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
       // 4. CRITICAL: Update provider after successful download
       if (mounted) {
-        ref
-                .read(localFileProvider((message.imageId!, _chatId)).notifier)
-                .state =
+        ref.read(localFileProvider(message.imageId!).notifier).state =
             localImageFile;
-        ref
-                .read(
-                  imageLoadingStateProvider((
-                    message.imageId!,
-                    _chatId,
-                  )).notifier,
-                )
-                .state =
+        ref.read(imageLoadingStateProvider(message.imageId!).notifier).state =
             false;
       }
 
@@ -850,14 +817,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     } catch (e) {
       // Set loading to false even on error
       if (mounted) {
-        ref
-                .read(
-                  imageLoadingStateProvider((
-                    message.imageId!,
-                    _chatId,
-                  )).notifier,
-                )
-                .state =
+        ref.read(imageLoadingStateProvider(message.imageId!).notifier).state =
             false;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -887,31 +847,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         // Audio already exists, update provider and cleanup cloud storage
         if (mounted) {
           final audioFile = io.File(savePath);
-          ref
-                  .read(
-                    localAudioFileProvider((
-                      message.audioId!,
-                      _chatId,
-                    )).notifier,
-                  )
-                  .state =
+          ref.read(localAudioFileProvider(message.audioId!).notifier).state =
               audioFile;
-          ref
-                  .read(
-                    audioLoadingStateProvider((
-                      message.audioId!,
-                      _chatId,
-                    )).notifier,
-                  )
-                  .state =
+          ref.read(audioLoadingStateProvider(message.audioId!).notifier).state =
               false;
           // Reset error state
-          ref
-                  .read(
-                    audioErrorProvider((message.audioId!, _chatId)).notifier,
-                  )
-                  .state =
-              false;
+          ref.read(audioErrorProvider(message.audioId!).notifier).state = false;
         }
 
         try {
@@ -938,21 +879,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       } catch (e) {
         // Set loading to false and error to true on download failure
         if (mounted) {
-          ref
-                  .read(
-                    audioLoadingStateProvider((
-                      message.audioId!,
-                      _chatId,
-                    )).notifier,
-                  )
-                  .state =
+          ref.read(audioLoadingStateProvider(message.audioId!).notifier).state =
               false;
-          ref
-                  .read(
-                    audioErrorProvider((message.audioId!, _chatId)).notifier,
-                  )
-                  .state =
-              true;
+          ref.read(audioErrorProvider(message.audioId!).notifier).state = true;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -968,26 +897,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       // 4. CRITICAL: Update provider after successful download
       if (mounted) {
         final audioFile = io.File(savePath);
-        ref
-                .read(
-                  localAudioFileProvider((message.audioId!, _chatId)).notifier,
-                )
-                .state =
+        ref.read(localAudioFileProvider(message.audioId!).notifier).state =
             audioFile;
-        ref
-                .read(
-                  audioLoadingStateProvider((
-                    message.audioId!,
-                    _chatId,
-                  )).notifier,
-                )
-                .state =
+        ref.read(audioLoadingStateProvider(message.audioId!).notifier).state =
             false;
         // Reset error state on successful download
-        ref
-                .read(audioErrorProvider((message.audioId!, _chatId)).notifier)
-                .state =
-            false;
+        ref.read(audioErrorProvider(message.audioId!).notifier).state = false;
       }
 
       // 5. Cleanup cloud storage after successful download
@@ -1003,19 +918,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     } catch (e) {
       // Set loading to false and error to true on failure
       if (mounted) {
-        ref
-                .read(
-                  audioLoadingStateProvider((
-                    message.audioId!,
-                    _chatId,
-                  )).notifier,
-                )
-                .state =
+        ref.read(audioLoadingStateProvider(message.audioId!).notifier).state =
             false;
-        ref
-                .read(audioErrorProvider((message.audioId!, _chatId)).notifier)
-                .state =
-            true;
+        ref.read(audioErrorProvider(message.audioId!).notifier).state = true;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Unable to process audio. Please try again.'),
@@ -2047,6 +1952,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       try {
         final existsLocally = await SqfliteHelper.messageExists(message.id);
         if (existsLocally) {
+          if (message.imageId != null) {
+            // Delete image from Appwrite Storage
+            await storage.deleteFile(
+              bucketId: bucketId,
+              fileId: message.imageId!,
+            );
+          }
+          if (message.audioId != null) {
+            // Delete audio from Appwrite Storage
+            await storage.deleteFile(
+              bucketId: bucketId,
+              fileId: message.audioId!,
+            );
+          }
           // Update UI provider
           if (!mounted) return;
           final currentMessages = ref.read(messagesProvider(chatId));
@@ -2111,6 +2030,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
       final isOnline = await ref.read(networkConnectivityProvider.future);
       if (isOnline) {
+        if (message.imageId != null) {
+            // Delete image from Appwrite Storage
+            await storage.deleteFile(
+              bucketId: bucketId,
+              fileId: message.imageId!,
+            );
+          }
+          if (message.audioId != null) {
+            // Delete audio from Appwrite Storage
+            await storage.deleteFile(
+              bucketId: bucketId,
+              fileId: message.audioId!,
+            );
+          }
         final deleted = await ChatService.deleteMessageFromAppwrite(message.id);
         if (deleted) {
           try {

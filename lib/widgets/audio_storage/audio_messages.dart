@@ -292,12 +292,8 @@ class AudioMessagesHandler {
         // Update provider for sender's audio bubble
         if (context.mounted) {
           final audioFile = io.File(savePath);
-          ref.read(localAudioFileProvider((file.$id, chatId)).notifier).state =
-              audioFile;
-          ref
-                  .read(audioLoadingStateProvider((file.$id, chatId)).notifier)
-                  .state =
-              false;
+          ref.read(localAudioFileProvider(file.$id).notifier).state = audioFile;
+          ref.read(audioLoadingStateProvider(file.$id).notifier).state = false;
         }
       } catch (e) {
         // Ignore local save error, upload succeeded

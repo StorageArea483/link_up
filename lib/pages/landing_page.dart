@@ -1026,18 +1026,27 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                           if (!context.mounted) return;
 
                           if (contactUserDoc.exists) {
-                            // fetch the contact doc in the current user's contacts subcollection
-                            final contactDoc = await FirebaseFirestore.instance
+                            // References for both sides of the contact
+                            final currentUserContactRef = FirebaseFirestore
+                                .instance
                                 .collection('users')
                                 .doc(currentUser.uid)
                                 .collection('contacts')
-                                .doc(contact.uid)
-                                .get();
+                                .doc(contact.uid);
 
-                            if (contactDoc.exists) {
-                              await contactDoc.reference.delete();
-                            } else {
-                              contactUserDoc.reference.delete();
+                            final otherUserContactRef = FirebaseFirestore
+                                .instance
+                                .collection('users')
+                                .doc(contact.uid)
+                                .collection('contacts')
+                                .doc(currentUser.uid);
+
+                            // Delete both docs; delete() is safe if a doc doesn't exist
+                            if ((await currentUserContactRef.get()).exists) {
+                              await currentUserContactRef.delete();
+                            }
+                            if ((await otherUserContactRef.get()).exists) {
+                              await otherUserContactRef.delete();
                             }
 
                             if (!context.mounted) return;
@@ -1054,6 +1063,7 @@ class _LandingPageState extends ConsumerState<LandingPage> {
                             Navigator.pop(context);
                             ref.invalidate(userContactProvider);
                           } else {
+                            // contact user doc itself doesn’t exist
                             if (!context.mounted) return;
                             ref.read(deletingContactProvider.notifier).state =
                                 false;

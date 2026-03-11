@@ -86,6 +86,32 @@ class _EditUserInfoState extends ConsumerState<EditUserInfo> {
           // ✅ update() merges with existing doc, won't delete other fields
           await userDoc.reference.update(updatedFields);
 
+          // Build fields to push into contacts docs
+          final Map<String, dynamic> contactUpdateFields = {};
+
+          if (updatedFields.containsKey('name')) {
+            contactUpdateFields['contact name'] = updatedFields['name'];
+          }
+          if (updatedFields.containsKey('user phone number')) {
+            contactUpdateFields['phone number'] =
+                updatedFields['user phone number'];
+          }
+          if (updatedFields.containsKey('photoURL')) {
+            contactUpdateFields['photoURL'] = updatedFields['photoURL'];
+          }
+
+          if (contactUpdateFields.isNotEmpty) {
+            // Update every contacts/{doc} where this user is the contact
+            final contactsSnap = await FirebaseFirestore.instance
+                .collectionGroup('contacts')
+                .where('uid', isEqualTo: currentUser.uid)
+                .get();
+
+            for (final doc in contactsSnap.docs) {
+              await doc.reference.update(contactUpdateFields);
+            }
+          }
+
           ref.read(isLoadingProvider.notifier).state = false;
           if (!mounted) return;
 

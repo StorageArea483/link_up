@@ -31,19 +31,19 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
       _checkLocalFile();
     });
   }
+  @override
+  void didUpdateWidget(covariant AudioBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chatId == null && widget.chatId != null) {
+      _checkLocalFile();
+    }
+  }
 
   Future<void> _checkLocalFile() async {
     // Early return if chatId is null
     if (widget.chatId == null) {
       if (mounted) {
-        ref
-                .read(
-                  audioLoadingStateProvider((
-                    widget.audioId,
-                    widget.chatId,
-                  )).notifier,
-                )
-                .state =
+        ref.read(audioLoadingStateProvider(widget.audioId).notifier).state =
             false;
       }
       return;
@@ -58,34 +58,12 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
       // Check once - if file exists, update provider
       if (await file.exists()) {
         if (mounted) {
-          ref
-                  .read(
-                    localAudioFileProvider((
-                      widget.audioId,
-                      widget.chatId,
-                    )).notifier,
-                  )
-                  .state =
+          ref.read(localAudioFileProvider(widget.audioId).notifier).state =
               file;
-          ref
-                  .read(
-                    audioLoadingStateProvider((
-                      widget.audioId,
-                      widget.chatId,
-                    )).notifier,
-                  )
-                  .state =
+          ref.read(audioLoadingStateProvider(widget.audioId).notifier).state =
               false;
           // Reset error state if file exists
-          ref
-                  .read(
-                    audioErrorProvider((
-                      widget.audioId,
-                      widget.chatId,
-                    )).notifier,
-                  )
-                  .state =
-              false;
+          ref.read(audioErrorProvider(widget.audioId).notifier).state = false;
         }
       }
       // If file doesn't exist, keep loading state true
@@ -93,36 +71,18 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
     } catch (e) {
       // On error, stop loading and set error state
       if (mounted) {
-        ref
-                .read(
-                  audioLoadingStateProvider((
-                    widget.audioId,
-                    widget.chatId,
-                  )).notifier,
-                )
-                .state =
+        ref.read(audioLoadingStateProvider(widget.audioId).notifier).state =
             false;
-        ref
-                .read(
-                  audioErrorProvider((widget.audioId, widget.chatId)).notifier,
-                )
-                .state =
-            true;
+        ref.read(audioErrorProvider(widget.audioId).notifier).state = true;
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = ref.watch(
-      audioLoadingStateProvider((widget.audioId, widget.chatId)),
-    );
-    final localFile = ref.watch(
-      localAudioFileProvider((widget.audioId, widget.chatId)),
-    );
-    final audioError = ref.watch(
-      audioErrorProvider((widget.audioId, widget.chatId)),
-    );
+    final isLoading = ref.watch(audioLoadingStateProvider(widget.audioId));
+    final localFile = ref.watch(localAudioFileProvider(widget.audioId));
+    final audioError = ref.watch(audioErrorProvider(widget.audioId));
 
     // Show error state with retry button
     if (audioError) {
@@ -148,21 +108,11 @@ class _AudioBubbleState extends ConsumerState<AudioBubble> {
               icon: Icon(Icons.refresh, color: Colors.red[700], size: 20),
               onPressed: () {
                 // Reset error state and trigger re-check
-                ref
-                        .read(
-                          audioErrorProvider((
-                            widget.audioId,
-                            widget.chatId,
-                          )).notifier,
-                        )
-                        .state =
+                ref.read(audioErrorProvider((widget.audioId)).notifier).state =
                     false;
                 ref
                         .read(
-                          audioLoadingStateProvider((
-                            widget.audioId,
-                            widget.chatId,
-                          )).notifier,
+                          audioLoadingStateProvider(widget.audioId).notifier,
                         )
                         .state =
                     true;

@@ -31,43 +31,38 @@ final currentUserIdProvider = StateProvider<String?>((ref) => null);
 // Chat ID provider
 final chatIdProvider = StateProvider<String?>((ref) => null);
 
-final audioErrorProvider = StateProvider.family<bool, (String, String?)>(
-  (ref, param) => false,
+final audioErrorProvider = StateProvider.family<bool, String>(
+  (ref, audioId) => false,
 );
 
 // Local File provider (Family: imageId) - Each image has its own file state
-final localFileProvider = StateProvider.family<File?, (String, String?)>((
-  ref,
-  params,
-) {
-  ref.keepAlive();
+final localFileProvider = StateProvider.family<File?, String>((ref, imageId) {
   return null;
 });
 
 // Loading state provider (Family: imageId) - Each image has its own loading state
-final imageLoadingStateProvider = StateProvider.family<bool, (String, String?)>(
-  (ref, params) {
-    ref.keepAlive();
-    return true;
-  },
-);
+final imageLoadingStateProvider = StateProvider.family<bool, String>((
+  ref,
+  imageId,
+) {
+  return true;
+});
 
 // Local Audio File provider (Family: audioId) - Each audio has its own file state
-final localAudioFileProvider = StateProvider.family<File?, (String, String?)>((
+final localAudioFileProvider = StateProvider.family<File?, String>((
   ref,
-  params,
+  audioId,
 ) {
-  ref.keepAlive();
   return null;
 });
 
 // Audio Loading state provider (Family: audioId) - Each audio has its own loading state
-final audioLoadingStateProvider = StateProvider.family<bool, (String, String?)>(
-  (ref, params) {
-    ref.keepAlive();
-    return true;
-  },
-);
+final audioLoadingStateProvider = StateProvider.family<bool, String>((
+  ref,
+  audioId,
+) {
+  return true;
+});
 
 final toggleRecordingProvider = StateProvider<bool>((ref) => false);
 

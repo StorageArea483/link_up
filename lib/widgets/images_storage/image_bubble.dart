@@ -27,6 +27,14 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
   }
 
   @override
+  void didUpdateWidget(covariant ImageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chatId == null && widget.chatId != null) {
+      _checkLocalFile();
+    }
+  }
+
+  @override
   void dispose() {
     super.dispose();
   }
@@ -35,14 +43,7 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
     // Early return if chatId is null
     if (widget.chatId == null) {
       if (mounted) {
-        ref
-                .read(
-                  imageLoadingStateProvider((
-                    widget.imageId,
-                    widget.chatId,
-                  )).notifier,
-                )
-                .state =
+        ref.read(imageLoadingStateProvider(widget.imageId).notifier).state =
             false;
       }
       return;
@@ -59,24 +60,9 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
       // Check once - if file exists, update provider
       if (exists) {
         if (mounted) {
-          ref
-                  .read(
-                    localFileProvider((
-                      widget.imageId,
-                      widget.chatId!,
-                    )).notifier,
-                  )
-                  .state =
-              file;
+          ref.read(localFileProvider(widget.imageId).notifier).state = file;
 
-          ref
-                  .read(
-                    imageLoadingStateProvider((
-                      widget.imageId,
-                      widget.chatId,
-                    )).notifier,
-                  )
-                  .state =
+          ref.read(imageLoadingStateProvider(widget.imageId).notifier).state =
               false;
         }
       }
@@ -85,14 +71,7 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
     } catch (e) {
       // On error, stop loading
       if (mounted) {
-        ref
-                .read(
-                  imageLoadingStateProvider((
-                    widget.imageId,
-                    widget.chatId,
-                  )).notifier,
-                )
-                .state =
+        ref.read(imageLoadingStateProvider(widget.imageId).notifier).state =
             false;
       }
     }
@@ -118,12 +97,8 @@ class _ImageBubbleState extends ConsumerState<ImageBubble> {
       );
     }
 
-    final isLoading = ref.watch(
-      imageLoadingStateProvider((widget.imageId, widget.chatId)),
-    );
-    final localFile = ref.watch(
-      localFileProvider((widget.imageId, widget.chatId!)),
-    );
+    final isLoading = ref.watch(imageLoadingStateProvider(widget.imageId));
+    final localFile = ref.watch(localFileProvider(widget.imageId));
     if (isLoading) {
       return Container(
         width: 250,

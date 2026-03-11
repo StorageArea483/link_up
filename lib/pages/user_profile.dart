@@ -77,6 +77,14 @@ class _UserProfileState extends ConsumerState<UserProfile> {
           .collection('users')
           .doc(currentUser.uid)
           .update({'photoURL': fileUrl});
+      // Update every contacts/{doc} where this user is the contact
+      final contactsSnap = await FirebaseFirestore.instance
+          .collectionGroup('contacts')
+          .where('uid', isEqualTo: currentUser.uid)
+          .get();
+      for (final doc in contactsSnap.docs) {
+        await doc.reference.update({'photoURL': fileUrl});
+      }
 
       if (context.mounted) {
         Navigator.of(context).pop();
@@ -98,10 +106,10 @@ class _UserProfileState extends ConsumerState<UserProfile> {
       if (context.mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+           const SnackBar(
             content: Text(
-              'Failed to update profile picture: ${e.toString()}',
-              style: const TextStyle(color: Colors.white),
+              'Failed to update profile picture please try again.',
+              style: TextStyle(color: Colors.white),
             ),
             backgroundColor: Colors.red,
           ),
@@ -310,11 +318,48 @@ class _UserProfileState extends ConsumerState<UserProfile> {
                                         child: data.isNotEmpty
                                             ? CircleAvatar(
                                                 radius: 60,
-                                                backgroundImage: NetworkImage(
-                                                  data['photoURL'],
-                                                ),
                                                 backgroundColor:
                                                     AppColors.iconBackground,
+                                                child: ClipOval(
+                                                  child: Image.network(
+                                                    data['photoURL'],
+                                                    width: 120,
+                                                    height: 120,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder:
+                                                        (
+                                                          context,
+                                                          error,
+                                                          stackTrace,
+                                                        ) {
+                                                          return const Icon(
+                                                            Icons
+                                                                .person_2_outlined,
+                                                            color: AppColors
+                                                                .primaryBlue,
+                                                            size: 60,
+                                                          );
+                                                        },
+                                                    loadingBuilder:
+                                                        (
+                                                          context,
+                                                          child,
+                                                          loadingProgress,
+                                                        ) {
+                                                          if (loadingProgress ==
+                                                              null) {
+                                                            return child;
+                                                          }
+                                                          return const Center(
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2,
+                                                                ),
+                                                          );
+                                                        },
+                                                  ),
+                                                ),
                                               )
                                             : const CircleAvatar(
                                                 radius: 60,

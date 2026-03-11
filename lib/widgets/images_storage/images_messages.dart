@@ -113,13 +113,9 @@ class ImageMessagesHandler {
           // Update providers with the local io.File
           final localImageFile = io.File(savePath);
           if (!context.mounted) return false;
-          ref.read(localFileProvider((file.$id, chatId)).notifier).state =
-              localImageFile;
+          ref.read(localFileProvider(file.$id).notifier).state = localImageFile;
           if (!context.mounted) return false;
-          ref
-                  .read(imageLoadingStateProvider((file.$id, chatId)).notifier)
-                  .state =
-              false;
+          ref.read(imageLoadingStateProvider(file.$id).notifier).state = false;
           try {
             await Gal.putImage(savePath, album: 'LinkUp');
           } catch (e) {

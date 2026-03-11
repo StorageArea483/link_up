@@ -6,6 +6,7 @@ import 'package:link_up/models/message.dart';
 import 'package:link_up/services/chat_service.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/providers/chat_providers.dart';
+import 'package:link_up/config/appwrite_client.dart';
 import 'package:path_provider/path_provider.dart';
 
 class SqfliteMsgsClear {
@@ -109,10 +110,11 @@ class SqfliteMsgsClear {
       final localMessages = await SqfliteHelper.getDeliveredMessages(chatId!);
       final sentMessages = await ChatService.getMessages(chatId!);
 
-      // 2. Delete local media files (images and audio) FIRST
+      // 2. Delete media files from both local storage AND Appwrite Storage
       await _deleteLocalMediaFiles(localMessages, sentMessages);
+      await _deleteAppwriteMediaFiles(localMessages, sentMessages);
 
-      // 3. Clear messages from Appwrite (sent status messages) BEFORE SQLite
+      // 3. Clear messages from Appwrite (sent status messages) AFTER media deletion
       for (final doc in sentMessages.documents) {
         try {
           await ChatService.deleteMessageFromAppwrite(doc.$id);
@@ -228,6 +230,59 @@ class SqfliteMsgsClear {
           if (await audioFile.exists()) {
             await audioFile.delete();
           }
+        } catch (e) {
+          // Continue with other files even if one fails
+        }
+      }
+    } catch (e) {
+      // Media deletion errors don't prevent message clearing
+    }
+  }
+
+  // Delete all media files from Appwrite Storage for this chat
+  Future<void> _deleteAppwriteMediaFiles(
+    List<Message> localMessages,
+    dynamic sentMessages,
+  ) async {
+    try {
+      // Collect all media IDs from messages
+      final Set<String> imageIds = {};
+      final Set<String> audioIds = {};
+
+      // Extract IDs from local messages
+      for (Message message in localMessages) {
+        if (message.imageId != null) {
+          imageIds.add(message.imageId!);
+        }
+        if (message.audioId != null) {
+          audioIds.add(message.audioId!);
+        }
+      }
+
+      // Extract IDs from sent messages
+      for (final doc in sentMessages.documents) {
+        final data = doc.data;
+        if (data['imageId'] != null) {
+          imageIds.add(data['imageId']);
+        }
+        if (data['audioId'] != null) {
+          audioIds.add(data['audioId']);
+        }
+      }
+
+      // Delete image files from Appwrite Storage
+      for (String imageId in imageIds) {
+        try {
+          await storage.deleteFile(bucketId: bucketId, fileId: imageId);
+        } catch (e) {
+          // Continue with other files even if one fails
+        }
+      }
+
+      // Delete audio files from Appwrite Storage
+      for (String audioId in audioIds) {
+        try {
+          await storage.deleteFile(bucketId: bucketId, fileId: audioId);
         } catch (e) {
           // Continue with other files even if one fails
         }

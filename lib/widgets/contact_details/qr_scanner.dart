@@ -7,6 +7,7 @@ import 'package:link_up/providers/loading_provider.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:link_up/providers/user_contacts_provider.dart';
 
 class QrScanner extends ConsumerStatefulWidget {
   const QrScanner({super.key});
@@ -105,13 +106,6 @@ class _QrScannerState extends ConsumerState<QrScanner> {
         if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('This contact already exists'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => const CheckConnection(child: LandingPage()),
@@ -156,17 +150,15 @@ class _QrScannerState extends ConsumerState<QrScanner> {
           });
 
       if (!mounted) return;
-      if (!mounted) return;
       ref.read(isLoadingProvider.notifier).state = false;
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Contact added successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+
+      // Force contacts list to refresh so the new contact shows up
+      ref.invalidate(userContactProvider);
+      ref.read(userContactProvider);
 
       if (!mounted) return;
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (context) => const CheckConnection(child: LandingPage()),

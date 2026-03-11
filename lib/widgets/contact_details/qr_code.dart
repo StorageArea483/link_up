@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:link_up/pages/landing_page.dart';
+import 'package:link_up/providers/user_contacts_provider.dart';
 import 'package:link_up/styles/styles.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class QrCode extends StatelessWidget {
+class QrCode extends ConsumerWidget {
   const QrCode({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final currentUser = FirebaseAuth.instance.currentUser;
     final qrData = 'LINKUP:${currentUser!.uid}';
 
@@ -36,12 +38,15 @@ class QrCode extends StatelessWidget {
                         children: [
                           IconButton(
                             icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                            onPressed: () =>
-                                Navigator.of(context).pushReplacement(
+                            onPressed: () {
+                              ref.invalidate(userContactProvider);
+                              ref.read(userContactProvider);
+                              Navigator.of(context).pushReplacement(
                                   MaterialPageRoute(
                                     builder: (context) => const LandingPage(),
                                   ),
-                                ),
+                                );
+                            },
                           ),
                           Expanded(
                             child: Text(

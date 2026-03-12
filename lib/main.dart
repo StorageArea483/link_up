@@ -1,26 +1,15 @@
 import 'dart:developer';
 
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:link_up/pages/landing_page.dart';
-import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/services/notification_service.dart';
 import 'package:link_up/widgets/check_connection.dart';
 import 'firebase_options.dart';
 
 final NotificationService notificationService = NotificationService();
-// Background message handler must be annotated and top-level
-@pragma('vm:entry-point')
-Future<void> handleBackgroundMessage(RemoteMessage message) async {
-  // Handle navigation when app is opened from background notification
-  // Add a delay to ensure the app is fully initialized before navigating
-  await Future.delayed(const Duration(milliseconds: 500));
-  notificationService.navigatorKey.currentState?.pushReplacementNamed('/chats');
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -48,8 +37,6 @@ void main() async {
     log('Notification service initialization failed: $e', name: 'Main');
   }
 
-  FirebaseMessaging.onBackgroundMessage(handleBackgroundMessage);
-
   runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 }
 
@@ -58,12 +45,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: notificationService.navigatorKey,
-      home: const CheckConnection(child: LandingPage()),
-      routes: {
-        '/chats': (context) => const CheckConnection(child: UserChats()),
-      },
-    );
+    return const MaterialApp(home: CheckConnection(child: LandingPage()));
   }
 }

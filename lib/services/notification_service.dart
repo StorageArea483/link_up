@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -13,7 +12,6 @@ import 'package:link_up/providers/navigation_provider.dart';
 class NotificationService {
   final messaging = FirebaseMessaging.instance;
   final flutterLocalNotificationPlugin = FlutterLocalNotificationsPlugin();
-  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   // Initialize the service and ensure dotenv is loaded
 
   Future<void> initialize() async {
@@ -39,8 +37,9 @@ class NotificationService {
         settings: initializationSettings,
 
         onDidReceiveNotificationResponse: (details) {
+          // Just clear all notifications when user taps on notification
+          // No navigation to avoid WebSocket connection issues
           cancelAllNotifications();
-          navigatorKey.currentState?.pushReplacementNamed('/chats');
         },
       );
     } catch (e) {

@@ -28,15 +28,14 @@ class _QrScannerState extends ConsumerState<QrScanner> {
   Future<void> _handleQrCode(String? scannedData) async {
     if (scannedData == null) return;
 
-    if (!mounted) return;
+    // ✅ Prevent multiple scans firing at once
+    if (ref.read(isLoadingProvider)) return;
+
     if (!mounted) return;
     ref.read(isLoadingProvider.notifier).state = true;
 
     try {
-      // Check if the scanned data is in the correct format
       if (!scannedData.startsWith('LINKUP:')) {
-        if (!mounted) return;
-        if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -48,14 +47,11 @@ class _QrScannerState extends ConsumerState<QrScanner> {
         return;
       }
 
-      // Extract the UID from the scanned data
       final scannedUserId = scannedData.replaceFirst('LINKUP:', '');
-      final currentUser = FirebaseAuth.instance.currentUser;
+      final currentUser = FirebaseAuth.instance.currentUser!;
 
       // Check if trying to add yourself
-      if (scannedUserId == currentUser!.uid) {
-        if (!mounted) return;
-        if (!mounted) return;
+      if (scannedUserId == currentUser.uid) {
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -67,7 +63,23 @@ class _QrScannerState extends ConsumerState<QrScanner> {
         return;
       }
 
-      // Fetch the scanned user's data from Firestore
+      // ✅ Check if contact already exists for current user
+      final existingContact = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .collection('contacts')
+          .doc(scannedUserId)
+          .get();
+
+      if (!mounted) return;
+
+      if (existingContact.exists) {
+        ref.read(isLoadingProvider.notifier).state = false;
+        if (!mounted) return;
+        return;
+      }
+
+      // Fetch scanned user's data
       final scannedUserDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(scannedUserId)
@@ -76,8 +88,6 @@ class _QrScannerState extends ConsumerState<QrScanner> {
       if (!mounted) return;
 
       if (!scannedUserDoc.exists) {
-        if (!mounted) return;
-        if (!mounted) return;
         ref.read(isLoadingProvider.notifier).state = false;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -91,21 +101,7 @@ class _QrScannerState extends ConsumerState<QrScanner> {
 
       final scannedUserData = scannedUserDoc.data()!;
 
-      if (!mounted) return;
-      // Add the scanned user to current user's contacts
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .collection('contacts')
-          .doc(scannedUserId)
-          .set({
-            'uid': scannedUserId,
-            'contact name': scannedUserData['name'] ?? 'Unknown',
-            'phone number': scannedUserData['user phone number'] ?? '',
-            'photoURL': scannedUserData['photoURL'] ?? '',
-          });
-
-      // Also add current user to scanned user's contacts (mutual connection)
+      // Fetch current user's data
       final currentUserDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser.uid)
@@ -113,44 +109,77 @@ class _QrScannerState extends ConsumerState<QrScanner> {
 
       if (!mounted) return;
 
+      if (!currentUserDoc.exists) {
+        ref.read(isLoadingProvider.notifier).state = false;
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not fetch your profile. Please try again.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
       final currentUserData = currentUserDoc.data()!;
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(scannedUserId)
-          .collection('contacts')
-          .doc(currentUser.uid)
-          .set({
-            'uid': currentUser.uid,
-            'contact name': currentUserData['name'] ?? 'Unknown',
-            'phone number': currentUserData['user phone number'] ?? '',
-            'photoURL': currentUserData['photoURL'] ?? '',
-          });
+      // ✅ Both writes run together — neither is skipped due to early navigation
+      await Future.wait([
+        // Add scanned user to current user's contacts
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .collection('contacts')
+            .doc(scannedUserId)
+            .set({
+              'uid': scannedUserId,
+              'contact name': scannedUserData['name'] ?? 'Unknown',
+              'phone number': scannedUserData['user phone number'] ?? '',
+              'photoURL': scannedUserData['photoURL'] ?? '',
+            }),
+
+        // Add current user to scanned user's contacts (mutual)
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(scannedUserId)
+            .collection('contacts')
+            .doc(currentUser.uid)
+            .set({
+              'uid': currentUser.uid,
+              'contact name': currentUserData['name'] ?? 'Unknown',
+              'phone number': currentUserData['user phone number'] ?? '',
+              'photoURL': currentUserData['photoURL'] ?? '',
+            }),
+      ]);
 
       if (!mounted) return;
       ref.read(isLoadingProvider.notifier).state = false;
-      if (!mounted) return;
 
-      // Force contacts list to refresh so the new contact shows up
+      // ✅ Invalidate AFTER both writes are confirmed complete
       ref.invalidate(userContactProvider);
       ref.read(userContactProvider);
 
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Contact added successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
 
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (context) => const CheckConnection(child: LandingPage()),
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      if (!mounted) return;
       ref.read(isLoadingProvider.notifier).state = false;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'An error occurred while adding contact please try again later',
+            'An error occurred while adding contact, please try again later',
           ),
           backgroundColor: Colors.redAccent,
         ),

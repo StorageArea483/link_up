@@ -16,6 +16,8 @@ final NotificationService notificationService = NotificationService();
 @pragma('vm:entry-point')
 Future<void> handleBackgroundMessage(RemoteMessage message) async {
   // Handle navigation when app is opened from background notification
+  // Add a delay to ensure the app is fully initialized before navigating
+  await Future.delayed(const Duration(milliseconds: 500));
   notificationService.navigatorKey.currentState?.pushReplacementNamed('/chats');
 }
 

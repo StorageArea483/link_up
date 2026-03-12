@@ -647,7 +647,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
             // IMPORTANT: Auto-mark as delivered if receiver is online and in chat
             if (newMessage.status == 'sent' &&
-                _currentUserId != null &&
                 newMessage.receiverId == _currentUserId &&
                 mounted) {
               // Mark this specific message as delivered
@@ -2032,19 +2031,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       final isOnline = await ref.read(networkConnectivityProvider.future);
       if (isOnline) {
         if (message.imageId != null) {
-          // Delete image from Appwrite Storage
-          await storage.deleteFile(
-            bucketId: bucketId,
-            fileId: message.imageId!,
-          );
-        }
-        if (message.audioId != null) {
-          // Delete audio from Appwrite Storage
-          await storage.deleteFile(
-            bucketId: bucketId,
-            fileId: message.audioId!,
-          );
-        }
+            // Delete image from Appwrite Storage
+            await storage.deleteFile(
+              bucketId: bucketId,
+              fileId: message.imageId!,
+            );
+          }
+          if (message.audioId != null) {
+            // Delete audio from Appwrite Storage
+            await storage.deleteFile(
+              bucketId: bucketId,
+              fileId: message.audioId!,
+            );
+          }
         final deleted = await ChatService.deleteMessageFromAppwrite(message.id);
         if (deleted) {
           try {

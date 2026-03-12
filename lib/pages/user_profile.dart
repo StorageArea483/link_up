@@ -8,6 +8,7 @@ import 'package:link_up/config/appwrite_client.dart';
 import 'package:link_up/pages/google_signup.dart';
 import 'package:link_up/pages/user_chats.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
+import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/providers/user_contacts_provider.dart';
 import 'package:link_up/providers/user_profile_provider.dart';
 import 'package:link_up/styles/styles.dart';
@@ -106,7 +107,7 @@ class _UserProfileState extends ConsumerState<UserProfile> {
       if (context.mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-           const SnackBar(
+          const SnackBar(
             content: Text(
               'Failed to update profile picture please try again.',
               style: TextStyle(color: Colors.white),
@@ -209,6 +210,9 @@ class _UserProfileState extends ConsumerState<UserProfile> {
 
   @override
   Widget build(BuildContext context) {
+    if (mounted) {
+      ref.read(navigationProvider.notifier).state = null;
+    }
     final userInfo = ref.watch(currentUserInfoProvider);
     return Scaffold(
       backgroundColor: AppColors.background,

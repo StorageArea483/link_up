@@ -6,6 +6,7 @@ import 'package:link_up/pages/incoming_call_screen.dart';
 import 'package:link_up/pages/meetings_page.dart';
 import 'package:link_up/providers/connectivity_provider.dart';
 import 'package:link_up/providers/loading_provider.dart';
+import 'package:link_up/providers/navigation_provider.dart';
 import 'package:link_up/providers/random_num_provider.dart';
 import 'package:link_up/providers/call_log_provider.dart';
 import 'package:link_up/services/call_service.dart';
@@ -194,6 +195,9 @@ class _LandingPageState extends ConsumerState<LandingPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (mounted) {
+      ref.read(navigationProvider.notifier).state = null;
+    }
     final phoneAsync = ref.watch(userPhoneNumberProvider);
     return Scaffold(
       backgroundColor: AppColors.background,
